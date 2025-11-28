@@ -1,0 +1,12 @@
+graph TD
+    A[Smithy Docs<br/>GitHub] -->|Clone & Convert| B[Ingestion Script]
+    B -->|Upload Markdown| C[S3 Bucket<br/>Documentation]
+    C -->|Ingest & Embed| D[Bedrock Knowledge Base]
+    D -->|Store Vectors| E[S3 Bucket<br/>Vector Store]
+    D -->|Query| F[Lambda Function<br/>MCP Server]
+    F -->|MCP Protocol| G[Kiro or any MCP Client]
+    
+    style A fill:#f9f,stroke:#333,stroke-width:2px
+    style D fill:#ff9,stroke:#333,stroke-width:2px
+    style F fill:#9f9,stroke:#333,stroke-width:2px
+    style G fill:#99f,stroke:#333,stroke-width:2px

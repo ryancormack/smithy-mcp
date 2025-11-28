@@ -1,0 +1,13 @@
+{
+  "staging": {
+    "domain": "staging.example.com",
+    "knowledgeBaseId": "XXXXXXXXXXXX"
+  },
+  "production": {
+    "domain": "example.com",
+    "knowledgeBaseId": "XXXXXXXXXXXX"
+  },
+  "acknowledged-issue-numbers": [
+    34892
+  ]
+}

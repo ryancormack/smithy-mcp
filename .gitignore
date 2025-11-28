@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+cdk.out/
+*.js
+*.d.ts
+!jest.config.js
+.env
+.env.local
+coverage/
+.nyc_output/
+*.tsbuildinfo
+smithy-docs-*/
+# CDK context with environment-specific values
+packages/cdk/cdk.context.json

@@ -1,0 +1,23 @@
+{
+  "name": "@smithy-mcp/cdk",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "synth": "cdk synth",
+    "cdk": "cdk",
+    "deploy:staging": "cdk deploy --all --context environment=staging --require-approval never",
+    "deploy:production": "cdk deploy --all --context environment=production --require-approval never",
+    "destroy": "cdk destroy --all"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.160.0",
+    "constructs": "^10.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "aws-cdk": "^2.160.0",
+    "esbuild": "^0.27.0",
+    "typescript": "^5.3.0"
+  }
+}

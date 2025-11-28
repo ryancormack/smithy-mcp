@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smithy MCP Server</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background: #f5f5f5;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+
+    header {
+      background: #232f3e;
+      color: white;
+      padding: 60px 20px;
+      text-align: center;
+      margin: -40px -20px 40px;
+    }
+
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 1.2em;
+      opacity: 0.9;
+    }
+
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 30px;
+      margin-bottom: 30px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    h2 {
+      color: #232f3e;
+      margin-bottom: 20px;
+      font-size: 1.8em;
+    }
+
+    h3 {
+      color: #232f3e;
+      margin: 25px 0 15px;
+      font-size: 1.3em;
+    }
+
+    code {
+      background: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Courier New', monospace;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background: #f4f4f4;
+      padding: 20px;
+      border-radius: 5px;
+      overflow-x: auto;
+      margin: 15px 0;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+    }
+
+    .endpoint {
+      background: #e8f4f8;
+      padding: 15px;
+      border-radius: 5px;
+      margin: 15px 0;
+      border-left: 4px solid #0073bb;
+    }
+
+    .method {
+      display: inline-block;
+      background: #0073bb;
+      color: white;
+      padding: 4px 10px;
+      border-radius: 3px;
+      font-weight: bold;
+      margin-right: 10px;
+    }
+
+    ul {
+      margin: 15px 0 15px 30px;
+    }
+
+    li {
+      margin: 8px 0;
+    }
+
+    a {
+      color: #0073bb;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .note {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin: 15px 0;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+
+<body>
+  <header>
+    <h1>Smithy MCP Server</h1>
+    <p class="subtitle">Model Context Protocol server for Smithy documentation</p>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <h2>Overview</h2>
+      <p>This MCP server provides semantic search and document access for Smithy documentation using AWS Bedrock
+        Knowledge Bases. It enables AI assistants to answer questions about Smithy with accurate, context-aware
+        responses.</p>
+    </div>
+
+    <div class="card">
+      <h2>MCP Endpoint</h2>
+      <div class="endpoint">
+        <span class="method">POST</span>
+        <code>/mcp</code>
+      </div>
+      <p>All MCP requests should be sent to this endpoint using JSON-RPC 2.0 format.</p>
+    </div>
+
+    <div class="card">
+      <h2>Available Tools</h2>
+
+      <h3>search_smithy_docs</h3>
+      <p>Search Smithy documentation using semantic search powered by Bedrock Knowledge Base.</p>
+      <pre><code>{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "search_smithy_docs",
+    "arguments": {
+      "query": "How do I define a service?",
+      "max_results": 5
+    }
+  },
+  "id": 1
+}</code></pre>
+      <p><strong>Parameters:</strong></p>
+      <ul>
+        <li><code>query</code> (string, required): Search query</li>
+        <li><code>max_results</code> (number, optional): Maximum results to return (1-10, default: 5)</li>
+      </ul>
+
+      <h3>read_smithy_doc</h3>
+      <p>Read the full content of a specific Smithy documentation file.</p>
+      <pre><code>{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "read_smithy_doc",
+    "arguments": {
+      "file_path": "quickstart.md"
+    }
+  },
+  "id": 2
+}</code></pre>
+      <p><strong>Parameters:</strong></p>
+      <ul>
+        <li><code>file_path</code> (string, required): Relative path to the documentation file</li>
+      </ul>
+
+      <h3>list_smithy_topics</h3>
+      <p>List all available Smithy documentation files.</p>
+      <pre><code>{
+  "jsonrpc": "2.0",
+  "method": "tools/call",
+  "params": {
+    "name": "list_smithy_topics",
+    "arguments": {}
+  },
+  "id": 3
+}</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>Kiro IDE Integration</h2>
+      <p>Add this server to your Kiro MCP configuration at <code>.kiro/settings/mcp.json</code>:</p>
+      <pre><code>{
+  "mcpServers": {
+    "smithy": {
+      "url": "https://smithymcp.com/mcp"
+    }
+  }
+}</code></pre>
+      <div class="note">
+        <strong>Note:</strong> Reconnect the MCP server from the Kiro MCP Server view after updating the configuration.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Claude Desktop Integration</h2>
+      <p>Add this server to your Claude Desktop configuration:</p>
+      <pre><code>{
+  "mcpServers": {
+    "smithy-docs": {
+      "url": "https://your-domain.com/mcp",
+      "transport": "http"
+    }
+  }
+}</code></pre>
+      <p>Configuration file location:</p>
+      <ul>
+        <li><strong>macOS:</strong> <code>~/Library/Application Support/Claude/claude_desktop_config.json</code></li>
+        <li><strong>Windows:</strong> <code>%APPDATA%\Claude\claude_desktop_config.json</code></li>
+      </ul>
+      <div class="note">
+        <strong>Note:</strong> Restart Claude Desktop after updating the configuration.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Example Usage</h2>
+      <p>Once configured, you can ask Claude questions like:</p>
+      <ul>
+        <li>"Search the Smithy docs for service definitions"</li>
+        <li>"How do I use Smithy traits?"</li>
+        <li>"Show me Smithy model examples"</li>
+        <li>"What are the best practices for Smithy API design?"</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Architecture</h2>
+      <p>This server uses:</p>
+      <ul>
+        <li><strong>AWS Lambda:</strong> Serverless compute for MCP server</li>
+        <li><strong>Bedrock Knowledge Base:</strong> Semantic search with S3 vector storage</li>
+        <li><strong>CloudFront:</strong> Global CDN for low-latency access</li>
+        <li><strong>S3:</strong> Documentation storage and vector embeddings</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>Resources</h2>
+      <ul>
+        <li><a href="https://smithy.io" target="_blank">Smithy Documentation</a></li>
+        <li><a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a></li>
+        <li><a href="https://github.com/ryancormack/smithy-mcp" target="_blank">GitHub Repository</a></li>
+      </ul>
+    </div>
+  </div>
+</body>
+
+</html>
