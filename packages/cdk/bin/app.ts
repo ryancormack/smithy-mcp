@@ -13,10 +13,6 @@ if (!envConfig) {
   throw new Error(`No config found for environment: ${environment}`);
 }
 
-if (!envConfig.knowledgeBaseId) {
-  throw new Error(`Knowledge Base ID not set for ${environment} in cdk.context.json`);
-}
-
 // DNS Stack (creates hosted zone for this environment's domain)
 const dnsStack = new SmithyDnsStack(app, 'SmithyDnsStack', {
   env: {
@@ -44,7 +40,7 @@ new SmithyMcpServerStack(app, 'SmithyMcpServerStack', {
   },
   description: `${environment}: MCP Server at ${envConfig.domain}`,
   bucket: kbStack.bucket,
-  knowledgeBaseId: envConfig.knowledgeBaseId,
+  knowledgeBaseId: kbStack.knowledgeBaseId,
   domainName: envConfig.domain,
   hostedZone: dnsStack.hostedZone,
 });
