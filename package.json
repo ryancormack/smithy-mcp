@@ -8,8 +8,8 @@
     "ingest": "pnpm --filter @smithy-mcp/ingestion start"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "typescript": "^5.3.0"
+    "@types/node": "^20.19.0",
+    "typescript": "^5.8.0"
   },
   "dependencies": {
     "express": "^5.1.0"
