@@ -7,7 +7,7 @@ const SMITHY_REPO = 'https://github.com/smithy-lang/smithy.git';
 const DOCS_SUBDIR = 'docs';
 
 export async function cloneDocs(): Promise<string> {
-  const tempDir = await mkdtemp(join('./', 'smithy-docs-'));
+  const tempDir = await mkdtemp(join(tmpdir(), 'smithy-docs-'));
   
   try {
     const git = simpleGit();

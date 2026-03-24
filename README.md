@@ -5,13 +5,14 @@ An MCP (Model Context Protocol) server that exposes Smithy CLI documentation thr
 ## Architecture
 
 ```
-Smithy Docs (GitHub) → Ingestion Script → S3 (docs) → Bedrock Knowledge Base → S3 Vectors (embeddings) → Lambda (MCP Server) → Public Function URL
+Smithy Docs (GitHub) → Ingestion Lambda (weekly) → S3 (docs) → Bedrock Knowledge Base → S3 Vectors (embeddings) → Lambda (MCP Server) → Public Function URL
 ```
 
 Uses **S3 Vectors** for cost-effective vector storage (~$5/month vs ~$705/month with OpenSearch Serverless).
 
 ## Features
 
+- **Automated Ingestion**: Weekly Lambda clones docs, converts RST to Markdown, uploads to S3, and syncs the Knowledge Base
 - **Semantic Search**: Search Smithy documentation using natural language queries
 - **Full Document Access**: Read complete documentation files
 - **Topic Listing**: Browse all available documentation
@@ -23,7 +24,7 @@ Uses **S3 Vectors** for cost-effective vector storage (~$5/month vs ~$705/month 
 ```
 smithy-mcp-server/
 ├── packages/
-│   ├── ingestion/       # Clone, convert, and upload Smithy docs
+│   ├── ingestion/       # Clone, convert, and upload Smithy docs (CLI + Lambda)
 │   ├── functions/       # MCP server Lambda functions
 │   └── cdk/            # Infrastructure as code
 ├── package.json
@@ -65,21 +66,33 @@ Save the output values:
 - `SmithyKnowledgeBaseId`
 - `SmithyMcpServerUrl`
 
-### 5. Run Ingestion
+### 5. Automated Ingestion
+
+After deployment, a scheduled Lambda automatically runs weekly to:
+1. Clone the latest Smithy documentation from GitHub
+2. Convert RST files to Markdown
+3. Upload to S3
+4. Trigger a Knowledge Base sync
+
+You can also trigger the Lambda manually:
+
+```bash
+aws lambda invoke \
+  --function-name <IngestionFunctionName> \
+  --payload '{}' \
+  output.json
+```
+
+Or run ingestion locally:
 
 ```bash
 export BUCKET_NAME=<SmithyDocsBucketName>
 pnpm ingest
 ```
 
-### 6. Sync Knowledge Base
+After local ingestion, trigger a Knowledge Base sync:
 
 ```bash
-# Get data source ID
-aws bedrock-agent list-data-sources \
-  --knowledge-base-id <SmithyKnowledgeBaseId>
-
-# Start sync
 aws bedrock-agent start-ingestion-job \
   --knowledge-base-id <SmithyKnowledgeBaseId> \
   --data-source-id <DataSourceId>
@@ -178,10 +191,12 @@ pnpm build
 # Deploy changes
 cd packages/cdk && pnpm deploy
 
-# Update documentation
+# Manually trigger ingestion Lambda
+aws lambda invoke --function-name <IngestionFunctionName> --payload '{}' output.json
+
+# Or run ingestion locally
 export BUCKET_NAME=<SmithyDocsBucketName>
 pnpm ingest
-# Then trigger KB sync again
 ```
 
 ## Cost Estimate
@@ -190,9 +205,10 @@ pnpm ingest
 - **S3 Vectors**: ~$0.50/month (embeddings storage)
 - **Bedrock Embeddings**: ~$2 (one-time ingestion)
 - **Bedrock Retrieval**: ~$2/month (50K queries)
-- **Lambda**: ~$0.40/month (2M requests)
+- **Lambda (MCP Server)**: ~$0.40/month (2M requests)
+- **Lambda (Ingestion)**: ~$0.01/month (weekly 15-min execution)
 
-**Total**: ~$5.40/month (vs ~$705 with OpenSearch Serverless!)
+**Total**: ~$5.41/month (vs ~$705 with OpenSearch Serverless!)
 
 ## Troubleshooting
 

@@ -83,6 +83,9 @@ importers:
 
   packages/ingestion:
     dependencies:
+      '@aws-sdk/client-bedrock-agent':
+        specifier: ^3.750.0
+        version: 3.1015.0
       '@aws-sdk/client-s3':
         specifier: ^3.750.0
         version: 3.928.0

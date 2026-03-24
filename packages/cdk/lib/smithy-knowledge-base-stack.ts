@@ -3,6 +3,10 @@ import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as bedrock from 'aws-cdk-lib/aws-bedrock';
 import * as s3vectors from 'aws-cdk-lib/aws-s3vectors';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as events from 'aws-cdk-lib/aws-events';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as path from 'path';
 import { Construct } from 'constructs';
 
 export class SmithyKnowledgeBaseStack extends cdk.Stack {
@@ -87,6 +91,38 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     this.knowledgeBaseId = knowledgeBase.attrKnowledgeBaseId;
     this.dataSourceId = dataSource.attrDataSourceId;
 
+    // Ingestion Lambda (Docker container with git + pandoc)
+    const ingestionFunction = new lambda.DockerImageFunction(this, 'IngestionFunction', {
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, '../../ingestion')
+      ),
+      timeout: cdk.Duration.minutes(15),
+      memorySize: 1024,
+      ephemeralStorageSize: cdk.Size.gibibytes(1),
+      environment: {
+        BUCKET_NAME: this.bucket.bucketName,
+        KNOWLEDGE_BASE_ID: knowledgeBase.attrKnowledgeBaseId,
+        DATA_SOURCE_ID: dataSource.attrDataSourceId,
+      },
+    });
+
+    // Grant S3 read/write for uploading docs
+    this.bucket.grantReadWrite(ingestionFunction);
+
+    // Grant permission to trigger KB sync
+    ingestionFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['bedrock:StartIngestionJob'],
+      resources: [`arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/${knowledgeBase.attrKnowledgeBaseId}`],
+    }));
+
+    // Weekly schedule to refresh documentation
+    const scheduleRule = new events.Rule(this, 'IngestionSchedule', {
+      schedule: events.Schedule.rate(cdk.Duration.days(7)),
+      description: 'Weekly trigger for Smithy docs ingestion and KB sync',
+    });
+    scheduleRule.addTarget(new targets.LambdaFunction(ingestionFunction));
+
     new cdk.CfnOutput(this, 'BucketName', {
       value: this.bucket.bucketName,
       description: 'S3 bucket for Smithy documentation',
@@ -109,6 +145,11 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       value: vectorBucket.attrVectorBucketArn,
       description: 'S3 Vectors bucket ARN',
       exportName: 'SmithyVectorBucketArn'
+    });
+
+    new cdk.CfnOutput(this, 'IngestionFunctionName', {
+      value: ingestionFunction.functionName,
+      description: 'Ingestion Lambda function name',
     });
   }
 }
