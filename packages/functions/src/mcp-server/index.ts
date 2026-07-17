@@ -1,15 +1,11 @@
-import { Server as HttpServer } from 'node:http';
-import express, { NextFunction, Request, Response } from 'express';
+import { type Server as HttpServer } from 'node:http';
+import express, { type NextFunction, type Request, type Response } from 'express';
 import { BedrockAgentRuntimeClient } from '@aws-sdk/client-bedrock-agent-runtime';
-import {
-  GetObjectCommand,
-  ListObjectsV2Command,
-  S3Client
-} from '@aws-sdk/client-s3';
+import { GetObjectCommand, ListObjectsV2Command, S3Client } from '@aws-sdk/client-s3';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import { SearchResult } from '../common/types';
+import { type SearchResult } from '../common/types';
 import { searchKnowledgeBase } from './bedrock-client';
 import {
   boundUtf8Text,
@@ -24,9 +20,10 @@ import {
   MAX_QUERY_LENGTH,
   MAX_REQUEST_BODY_BYTES,
   MAX_TOOL_OUTPUT_BYTES,
-  ObjectPage,
+  type ObjectPage,
   relativeDocumentPath,
-  RuntimeConfig
+  renderDocumentList,
+  type RuntimeConfig
 } from './runtime';
 
 export interface DocumentBody {
@@ -92,10 +89,7 @@ function toolError(message: string) {
   };
 }
 
-export function createMcpServer(
-  config: RuntimeConfig,
-  services: RuntimeServices
-): McpServer {
+export function createMcpServer(config: RuntimeConfig, services: RuntimeServices): McpServer {
   const server = new McpServer({
     name: 'smithy-docs-mcp-server',
     version: '1.0.0'
@@ -159,10 +153,7 @@ export function createMcpServer(
       try {
         const heading = `# ${relativeDocumentPath(key) || 'Smithy document'}\n\n`;
         const contentBudget = MAX_TOOL_OUTPUT_BYTES - Buffer.byteLength(heading, 'utf8') - 128;
-        const document = await readDocumentBody(
-          await services.getDocument(key),
-          contentBudget
-        );
+        const document = await readDocumentBody(await services.getDocument(key), contentBudget);
         if (!document.text) {
           return toolError('The requested document was not found or is empty.');
         }
@@ -171,10 +162,12 @@ export function createMcpServer(
           ? '\n\n[Document truncated to stay within the response limit.]'
           : '';
         return {
-          content: [{
-            type: 'text',
-            text: boundUtf8Text(`${heading}${document.text}${truncation}`)
-          }]
+          content: [
+            {
+              type: 'text',
+              text: boundUtf8Text(`${heading}${document.text}${truncation}`)
+            }
+          ]
         };
       } catch {
         return toolError('Unable to read the requested document.');
@@ -192,7 +185,7 @@ export function createMcpServer(
     async () => {
       try {
         const result = await collectPaginatedKeys(
-          services.loadDocumentPage,
+          continuationToken => services.loadDocumentPage(continuationToken),
           MAX_LISTED_DOCUMENTS
         );
         const files = result.keys
@@ -200,17 +193,8 @@ export function createMcpServer(
           .filter((file): file is string => Boolean(file))
           .sort();
 
-        let text = `# Smithy Documentation\n\nListed: ${files.length} files`;
-        if (result.truncated) {
-          text += ` (limited to ${MAX_LISTED_DOCUMENTS})`;
-        }
-        text += '\n\n';
-        files.forEach(file => {
-          text += `- ${file}\n`;
-        });
-
         return {
-          content: [{ type: 'text', text: boundUtf8Text(text) }]
+          content: [{ type: 'text', text: renderDocumentList(files, result.truncated) }]
         };
       } catch {
         return toolError('Unable to list documentation topics right now.');
@@ -226,25 +210,25 @@ export function createRuntimeServices(config: RuntimeConfig): RuntimeServices {
   const bedrockClient = new BedrockAgentRuntimeClient({ region: config.resourceRegion });
 
   return {
-    search: (query, maxResults) => searchKnowledgeBase(
-      bedrockClient,
-      config.knowledgeBaseId,
-      query,
-      maxResults
-    ),
+    search: (query, maxResults) =>
+      searchKnowledgeBase(bedrockClient, config.knowledgeBaseId, query, maxResults),
     async getDocument(key) {
-      const response = await s3Client.send(new GetObjectCommand({
-        Bucket: config.bucketName,
-        Key: key
-      }));
+      const response = await s3Client.send(
+        new GetObjectCommand({
+          Bucket: config.bucketName,
+          Key: key
+        })
+      );
       return response.Body;
     },
     async loadDocumentPage(continuationToken) {
-      const response = await s3Client.send(new ListObjectsV2Command({
-        Bucket: config.bucketName,
-        Prefix: DOCUMENT_PREFIX,
-        ContinuationToken: continuationToken
-      }));
+      const response = await s3Client.send(
+        new ListObjectsV2Command({
+          Bucket: config.bucketName,
+          Prefix: DOCUMENT_PREFIX,
+          ContinuationToken: continuationToken
+        })
+      );
       return {
         keys: (response.Contents || []).map(item => item.Key),
         nextToken: response.NextContinuationToken
@@ -253,12 +237,7 @@ export function createRuntimeServices(config: RuntimeConfig): RuntimeServices {
   };
 }
 
-function sendJsonRpcError(
-  response: Response,
-  status: number,
-  code: number,
-  message: string
-): void {
+function sendJsonRpcError(response: Response, status: number, code: number, message: string): void {
   response.status(status).json({
     jsonrpc: '2.0',
     error: { code, message },
@@ -339,25 +318,21 @@ export function createApp(
     }
   );
 
-  app.use(
-    (error: HttpError, _request: Request, response: Response, _next: NextFunction) => {
-      if (response.headersSent) {
-        return;
-      }
-      if (error.type === 'entity.too.large' || error.status === 413) {
-        sendJsonRpcError(response, 413, -32600, 'Request body is too large');
-        return;
-      }
-      sendJsonRpcError(response, 400, -32700, 'Invalid JSON request body');
+  app.use((error: HttpError, _request: Request, response: Response, _next: NextFunction) => {
+    if (response.headersSent) {
+      return;
     }
-  );
+    if (error.type === 'entity.too.large' || error.status === 413) {
+      sendJsonRpcError(response, 413, -32600, 'Request body is too large');
+      return;
+    }
+    sendJsonRpcError(response, 400, -32700, 'Invalid JSON request body');
+  });
 
   return app;
 }
 
-export function startServer(
-  environment: NodeJS.ProcessEnv = process.env
-): HttpServer {
+export function startServer(environment: NodeJS.ProcessEnv = process.env): HttpServer {
   const config = loadRuntimeConfig(environment);
   const app = createApp(config);
   const httpServer = app.listen(config.port, () => {
@@ -371,9 +346,7 @@ export function startServer(
 }
 
 const isDirectExecution =
-  typeof require !== 'undefined' &&
-  typeof module !== 'undefined' &&
-  require.main === module;
+  typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module;
 const isLambdaWebAdapterExecution =
   Boolean(process.env.AWS_LAMBDA_EXEC_WRAPPER) ||
   process.env.SMITHY_MCP_SERVER_AUTOSTART === 'true';

@@ -26,7 +26,7 @@ describe('checkout lifecycle', () => {
     await expect(
       withDocsCheckout(
         cloneOptions,
-        async (checkout) => {
+        async checkout => {
           expect(checkout).toMatchObject({
             commitSha,
             outputPath: '/tmp/smithy-docs-test/converted-output'
@@ -42,8 +42,8 @@ describe('checkout lifecycle', () => {
       )
     ).rejects.toBe(failure);
 
-    expect(execute.mock.calls.some((call) => call[1].includes('--depth=1'))).toBe(true);
-    expect(execute.mock.calls.some((call) => call[1].includes('sparse-checkout'))).toBe(true);
+    expect(execute.mock.calls.some(call => call[1].includes('--depth=1'))).toBe(true);
+    expect(execute.mock.calls.some(call => call[1].includes('sparse-checkout'))).toBe(true);
     expect(removeDirectory).toHaveBeenCalledWith('/tmp/smithy-docs-test', {
       recursive: true,
       force: true
@@ -104,19 +104,21 @@ describe('RST conversion', () => {
         ]),
         execute,
         makeDirectory: vi.fn(async () => undefined),
-        readTextFile: vi.fn(async (path) => generated.get(path) ?? ''),
+        readTextFile: vi.fn(async path => generated.get(path) ?? ''),
         writeTextFile: vi.fn(async (path, content) => {
           generated.set(path, content);
         }),
-        fileSize: vi.fn(async (path) => Buffer.byteLength(generated.get(path) ?? ''))
+        fileSize: vi.fn(async path => Buffer.byteLength(generated.get(path) ?? ''))
       }
     );
 
-    expect(files.map((file) => file.relativePath)).toEqual(['a.md', 'z/b.md']);
+    expect(files.map(file => file.relativePath)).toEqual(['a.md', 'z/b.md']);
     expect(maximumActive).toBe(1);
-    expect(execute.mock.calls.filter((call) => call[1][0] !== '--version').every(
-      (call) => String(call[1].at(-1)).startsWith('/checkout/converted-output/')
-    )).toBe(true);
+    expect(
+      execute.mock.calls
+        .filter(call => call[1][0] !== '--version')
+        .every(call => String(call[1].at(-1)).startsWith('/checkout/converted-output/'))
+    ).toBe(true);
     expect(files[0].content).toBe(
       '---\ntitle: "Alpha"\nsource: "smithy-docs/a.md"\noriginal_format: "rst"\n---\n\n# Alpha\n\nBody\n'
     );
@@ -124,16 +126,18 @@ describe('RST conversion', () => {
 
   it('fails on zero documents before starting Pandoc', async () => {
     const execute = vi.fn();
-    await expect(convertRstToMarkdown(
-      '/checkout/docs/source-2.0',
-      {
-        outputPath: '/checkout/output',
-        concurrency: 2,
-        commandTimeoutMs: 1_000,
-        commandMaxOutputBytes: 1_024
-      },
-      { findFiles: async () => [], execute }
-    )).rejects.toThrow('No RST documentation files');
+    await expect(
+      convertRstToMarkdown(
+        '/checkout/docs/source-2.0',
+        {
+          outputPath: '/checkout/output',
+          concurrency: 2,
+          commandTimeoutMs: 1_000,
+          commandMaxOutputBytes: 1_024
+        },
+        { findFiles: async () => [], execute }
+      )
+    ).rejects.toThrow('No RST documentation files');
     expect(execute).not.toHaveBeenCalled();
   });
 
@@ -154,23 +158,29 @@ describe('RST conversion', () => {
       return { stdout: '', stderr: '' };
     });
 
-    await expect(convertRstToMarkdown(
-      '/checkout/docs',
-      {
-        outputPath: '/checkout/output',
-        concurrency: 2,
-        commandTimeoutMs: 1_000,
-        commandMaxOutputBytes: 1_024
-      },
-      {
-        findFiles: async () => ['/checkout/docs/a.rst', '/checkout/docs/b.rst', '/checkout/docs/c.rst'],
-        execute,
-        makeDirectory: vi.fn(async () => undefined),
-        readTextFile: async (path) => generated.get(path) ?? '',
-        writeTextFile: async () => undefined,
-        fileSize: async () => 5
-      }
-    )).rejects.toThrow('bad RST');
+    await expect(
+      convertRstToMarkdown(
+        '/checkout/docs',
+        {
+          outputPath: '/checkout/output',
+          concurrency: 2,
+          commandTimeoutMs: 1_000,
+          commandMaxOutputBytes: 1_024
+        },
+        {
+          findFiles: async () => [
+            '/checkout/docs/a.rst',
+            '/checkout/docs/b.rst',
+            '/checkout/docs/c.rst'
+          ],
+          execute,
+          makeDirectory: vi.fn(async () => undefined),
+          readTextFile: async path => generated.get(path) ?? '',
+          writeTextFile: async () => undefined,
+          fileSize: async () => 5
+        }
+      )
+    ).rejects.toThrow('bad RST');
     expect(converted).not.toContain('/checkout/docs/c.rst');
   });
 });

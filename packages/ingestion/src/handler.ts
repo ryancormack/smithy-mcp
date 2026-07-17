@@ -12,13 +12,15 @@ export async function handler(_event: unknown): Promise<void> {
   try {
     const config = loadIngestionConfig(process.env, { requireBedrockIds: true });
     const result = await runIngestion(config);
-    console.log(JSON.stringify({
-      event: 'lambda_ingestion_completed',
-      changed: result.changed,
-      upstreamSha: result.manifest.upstreamSha,
-      documentCount: result.manifest.documents.length,
-      ingestionJobId: result.ingestionJobId
-    }));
+    console.log(
+      JSON.stringify({
+        event: 'lambda_ingestion_completed',
+        changed: result.changed,
+        upstreamSha: result.manifest.upstreamSha,
+        documentCount: result.manifest.documents.length,
+        ingestionJobId: result.ingestionJobId
+      })
+    );
   } catch (error) {
     console.error(JSON.stringify({ event: 'lambda_ingestion_failed', error: errorSummary(error) }));
     throw error;

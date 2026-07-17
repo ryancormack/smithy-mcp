@@ -186,7 +186,11 @@ export function loadIngestionConfig(
     docsPrefix: validatePrefix(environment.DOCS_PREFIX ?? DEFAULT_DOCS_PREFIX),
     forceRefresh: booleanValue(environment, 'FORCE_REFRESH', false),
     commandTimeoutMs: positiveInteger(environment, 'COMMAND_TIMEOUT_MS', 120_000),
-    commandMaxOutputBytes: positiveInteger(environment, 'COMMAND_MAX_OUTPUT_BYTES', 16 * 1024 * 1024),
+    commandMaxOutputBytes: positiveInteger(
+      environment,
+      'COMMAND_MAX_OUTPUT_BYTES',
+      16 * 1024 * 1024
+    ),
     conversionConcurrency: positiveInteger(environment, 'CONVERSION_CONCURRENCY', 4),
     s3Concurrency: positiveInteger(environment, 'S3_CONCURRENCY', 8),
     ingestionPollIntervalMs: pollInterval,

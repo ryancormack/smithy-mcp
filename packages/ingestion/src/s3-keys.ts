@@ -9,10 +9,12 @@ function stripBoundarySlashes(prefix: string): string {
 
 export function isReservedInternalPrefix(prefix: string): boolean {
   const normalized = stripBoundarySlashes(prefix);
-  return normalized === STATE_ROOT ||
+  return (
+    normalized === STATE_ROOT ||
     normalized.startsWith(`${STATE_ROOT}/`) ||
     normalized === STAGING_ROOT ||
-    normalized.startsWith(`${STAGING_ROOT}/`);
+    normalized.startsWith(`${STAGING_ROOT}/`)
+  );
 }
 
 export function normalizeDocsPrefix(prefix: string): string {

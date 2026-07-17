@@ -54,7 +54,8 @@ describe('local ingestion CLI', () => {
 
   it('still requires BUCKET_NAME and paired Bedrock IDs', async () => {
     await expect(runCli({})).rejects.toThrow('BUCKET_NAME');
-    await expect(runCli({ BUCKET_NAME: 'docs-bucket', KNOWLEDGE_BASE_ID: 'KB12345678' }))
-      .rejects.toThrow('supplied together');
+    await expect(
+      runCli({ BUCKET_NAME: 'docs-bucket', KNOWLEDGE_BASE_ID: 'KB12345678' })
+    ).rejects.toThrow('supplied together');
   });
 });

@@ -8,14 +8,24 @@
   },
   "scripts": {
     "build": "pnpm --filter @smithy-mcp/functions run build && pnpm --filter @smithy-mcp/ingestion run build && pnpm --filter @smithy-mcp/cdk run build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0",
+    "quality": "pnpm format:check && pnpm lint && pnpm typecheck",
     "typecheck": "pnpm --filter @smithy-mcp/functions run typecheck && pnpm --filter @smithy-mcp/ingestion run typecheck && pnpm --filter @smithy-mcp/cdk run typecheck",
     "test": "pnpm --filter @smithy-mcp/functions run test && pnpm --filter @smithy-mcp/ingestion run test && pnpm --filter @smithy-mcp/cdk run test",
     "start": "pnpm --filter @smithy-mcp/functions run start",
     "deploy": "pnpm --filter @smithy-mcp/cdk exec cdk deploy --all",
-    "ingest": "pnpm --filter @smithy-mcp/ingestion run start"
+    "ingest": "pnpm --filter @smithy-mcp/ingestion run start",
+    "smoke:mcp": "node scripts/smoke-mcp.mjs"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/node": "^22.20.1",
-    "typescript": "^5.9.3"
+    "eslint": "^9.39.5",
+    "globals": "^16.5.0",
+    "prettier": "^3.9.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.64.0"
   }
 }

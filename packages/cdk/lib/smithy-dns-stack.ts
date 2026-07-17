@@ -1,6 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import * as route53 from 'aws-cdk-lib/aws-route53';
-import { Construct } from 'constructs';
+import { type Construct } from 'constructs';
 
 export interface SmithyDnsStackProps extends cdk.StackProps {
   stage: string;

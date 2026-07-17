@@ -67,9 +67,10 @@ function loadEnvironmentConfig(app: cdk.App, stage: string): EnvironmentConfig {
   }
 
   const budgetLimitUsd = optionalPositiveNumber(raw.budgetLimitUsd, `${stage}.budgetLimitUsd`);
-  const budgetNotificationEmail = raw.budgetNotificationEmail === undefined
-    ? undefined
-    : requiredString(raw.budgetNotificationEmail, `${stage}.budgetNotificationEmail`);
+  const budgetNotificationEmail =
+    raw.budgetNotificationEmail === undefined
+      ? undefined
+      : requiredString(raw.budgetNotificationEmail, `${stage}.budgetNotificationEmail`);
   if ((budgetLimitUsd === undefined) !== (budgetNotificationEmail === undefined)) {
     throw new Error(
       `${stage}.budgetLimitUsd and ${stage}.budgetNotificationEmail must be configured together`
@@ -93,8 +94,10 @@ function loadEnvironmentConfig(app: cdk.App, stage: string): EnvironmentConfig {
 }
 
 const app = new cdk.App();
-const stage = requiredString(app.node.tryGetContext('environment') ?? 'staging', 'environment')
-  .toLowerCase();
+const stage = requiredString(
+  app.node.tryGetContext('environment') ?? 'staging',
+  'environment'
+).toLowerCase();
 if (stage !== 'staging' && stage !== 'production') {
   throw new Error('environment must be either staging or production');
 }

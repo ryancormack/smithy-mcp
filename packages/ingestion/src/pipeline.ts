@@ -1,22 +1,25 @@
 import { S3Client } from '@aws-sdk/client-s3';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { BedrockSender } from './bedrock.js';
-import { startIngestionAndWait } from './bedrock.js';
+import { BedrockIngestionTerminalError, startIngestionAndWait } from './bedrock.js';
 import type { CloneDocsDependencies } from './clone-docs.js';
 import { withDocsCheckout } from './clone-docs.js';
 import type { IngestionConfig } from './config.js';
 import type { ConvertDependencies } from './convert-rst.js';
 import { convertRstToMarkdown } from './convert-rst.js';
-import type {
-  PublishDependencies,
-  PublicationManifest,
-  S3Sender
-} from './upload-s3.js';
-import { publishToS3, readPublicationState } from './upload-s3.js';
+import type { PublishDependencies, PublicationManifest, S3Sender } from './upload-s3.js';
+import { publishToS3, readPublicationState, serializeManifest } from './upload-s3.js';
 import {
+  acquirePendingSyncState,
+  clearPendingSyncState,
   readBedrockSyncState,
+  readCompletedPendingJob,
+  readPendingSyncState,
+  recordPendingIngestionJob,
+  syncIdentityMatches,
   syncStateMatches,
+  type BedrockSyncIdentity,
   writeBedrockSyncState
 } from './sync-state.js';
 
@@ -32,6 +35,8 @@ export interface RunIngestionDependencies {
   bedrock?: BedrockSender;
   sleep?: (milliseconds: number) => Promise<void>;
   now?: () => number;
+  createSyncOwnerId?: () => string;
+  createClientToken?: () => string;
   logger?: IngestionLogger;
 }
 
@@ -42,7 +47,9 @@ export interface IngestionResult {
 }
 
 const defaultLogger: IngestionLogger = {
-  info: (summary) => console.log(JSON.stringify(summary))
+  info: summary => {
+    console.log(JSON.stringify(summary));
+  }
 };
 
 export async function runIngestion(
@@ -65,7 +72,7 @@ export async function runIngestion(
       commandTimeoutMs: config.commandTimeoutMs,
       commandMaxOutputBytes: config.commandMaxOutputBytes
     },
-    async (checkout) => {
+    async checkout => {
       logger.info({ event: 'upstream_resolved', upstreamSha: checkout.commitSha });
       const existingState = await readPublicationState(s3, config.bucketName, config.docsPrefix);
       if (
@@ -128,22 +135,63 @@ export async function runIngestion(
     return publication;
   }
 
-  if (!publication.changed) {
-    const syncState = await readBedrockSyncState(s3, config.bucketName, config.docsPrefix);
-    if (syncStateMatches(
-      syncState,
-      publication.manifest.upstreamSha,
-      config.knowledgeBaseId,
-      config.dataSourceId
-    )) {
+  const identity: BedrockSyncIdentity = {
+    publicationId: createHash('sha256')
+      .update(serializeManifest(publication.manifest), 'utf8')
+      .digest('hex'),
+    upstreamSha: publication.manifest.upstreamSha,
+    sourceRepository: publication.manifest.sourceRepository,
+    knowledgeBaseId: config.knowledgeBaseId,
+    dataSourceId: config.dataSourceId
+  };
+
+  let pending = await readPendingSyncState(s3, config.bucketName, config.docsPrefix);
+  if (pending !== undefined && !syncIdentityMatches(pending.state, identity)) {
+    if (!publication.changed) {
+      const syncState = await readBedrockSyncState(
+        s3,
+        config.bucketName,
+        config.docsPrefix,
+        identity
+      );
+      if (syncStateMatches(syncState, identity)) {
+        await clearPendingSyncState(s3, config.bucketName, config.docsPrefix, pending.state);
+        const currentPending = await readPendingSyncState(s3, config.bucketName, config.docsPrefix);
+        if (currentPending !== undefined && syncIdentityMatches(currentPending.state, identity)) {
+          pending = currentPending;
+        } else {
+          logger.info({
+            event: 'ingestion_skipped',
+            reason: 'upstream_sha_already_synced',
+            upstreamSha: publication.manifest.upstreamSha,
+            documentCount: publication.manifest.documents.length,
+            ingestionJobId: syncState.ingestionJobId
+          });
+          return { ...publication, ingestionJobId: syncState.ingestionJobId };
+        }
+      }
+    }
+    if (!syncIdentityMatches(pending.state, identity)) {
+      pending = undefined;
+    }
+  }
+
+  if (pending === undefined && !publication.changed) {
+    const syncState = await readBedrockSyncState(
+      s3,
+      config.bucketName,
+      config.docsPrefix,
+      identity
+    );
+    if (syncStateMatches(syncState, identity)) {
       logger.info({
         event: 'ingestion_skipped',
         reason: 'upstream_sha_already_synced',
         upstreamSha: publication.manifest.upstreamSha,
         documentCount: publication.manifest.documents.length,
-        ingestionJobId: syncState?.ingestionJobId
+        ingestionJobId: syncState.ingestionJobId
       });
-      return { ...publication, ingestionJobId: syncState?.ingestionJobId };
+      return { ...publication, ingestionJobId: syncState.ingestionJobId };
     }
     logger.info({
       event: 'bedrock_sync_retry',
@@ -152,32 +200,84 @@ export async function runIngestion(
     });
   }
 
-  const ingestionJob = await startIngestionAndWait(
-    {
-      knowledgeBaseId: config.knowledgeBaseId,
-      dataSourceId: config.dataSourceId,
-      clientToken: randomUUID(),
-      pollIntervalMs: config.ingestionPollIntervalMs,
-      maximumPollIntervalMs: config.ingestionPollMaxIntervalMs,
-      timeoutMs: config.ingestionTimeoutMs
-    },
-    {
-      bedrock: dependencies.bedrock,
-      sleep: dependencies.sleep,
-      now: dependencies.now
-    }
+  pending ??= await acquirePendingSyncState(
+    s3,
+    config.bucketName,
+    config.docsPrefix,
+    identity,
+    (dependencies.createSyncOwnerId ?? randomUUID)(),
+    (dependencies.createClientToken ?? randomUUID)()
   );
-  await writeBedrockSyncState(s3, config.bucketName, config.docsPrefix, {
-    version: 1,
-    upstreamSha: publication.manifest.upstreamSha,
-    knowledgeBaseId: config.knowledgeBaseId,
-    dataSourceId: config.dataSourceId,
-    ingestionJobId: ingestionJob.ingestionJobId
+
+  const alreadyCompleted = await readCompletedPendingJob(
+    s3,
+    config.bucketName,
+    config.docsPrefix,
+    pending.state
+  );
+  let ingestionJobId = alreadyCompleted?.ingestionJobId;
+
+  if (ingestionJobId === undefined) {
+    const pendingAtStart = pending;
+    try {
+      const ingestionJob = await startIngestionAndWait(
+        {
+          knowledgeBaseId: config.knowledgeBaseId,
+          dataSourceId: config.dataSourceId,
+          clientToken: pending.state.clientToken,
+          ingestionJobId: pending.state.ingestionJobId,
+          pollIntervalMs: config.ingestionPollIntervalMs,
+          maximumPollIntervalMs: config.ingestionPollMaxIntervalMs,
+          timeoutMs: config.ingestionTimeoutMs
+        },
+        {
+          bedrock: dependencies.bedrock,
+          sleep: dependencies.sleep,
+          now: dependencies.now,
+          onIngestionJobStarted: async startedJobId => {
+            pending = await recordPendingIngestionJob(
+              s3,
+              config.bucketName,
+              config.docsPrefix,
+              pendingAtStart,
+              startedJobId
+            );
+          }
+        }
+      );
+      ingestionJobId = ingestionJob.ingestionJobId;
+    } catch (error) {
+      if (error instanceof BedrockIngestionTerminalError) {
+        await clearPendingSyncState(s3, config.bucketName, config.docsPrefix, pending.state);
+      }
+      throw error;
+    }
+  }
+
+  if (pending.state.ingestionJobId === undefined) {
+    pending = await recordPendingIngestionJob(
+      s3,
+      config.bucketName,
+      config.docsPrefix,
+      pending,
+      ingestionJobId
+    );
+  }
+  await writeBedrockSyncState(s3, config.bucketName, config.docsPrefix, pending, ingestionJobId);
+  const pendingCleared = await clearPendingSyncState(
+    s3,
+    config.bucketName,
+    config.docsPrefix,
+    pending.state
+  );
+  logger.info({
+    event: 'bedrock_sync_completed',
+    ingestionJobId,
+    pendingCleared
   });
-  logger.info({ event: 'bedrock_sync_completed', ingestionJobId: ingestionJob.ingestionJobId });
 
   return {
     ...publication,
-    ingestionJobId: ingestionJob.ingestionJobId
+    ingestionJobId
   };
 }

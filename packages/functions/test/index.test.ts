@@ -1,15 +1,11 @@
-import { AddressInfo } from 'node:net';
-import http, { IncomingHttpHeaders, Server } from 'node:http';
+import { type AddressInfo } from 'node:net';
+import http, { type IncomingHttpHeaders, type Server } from 'node:http';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import {
-  createApp,
-  readDocumentBody,
-  RuntimeServices
-} from '../src/mcp-server/index';
+import { createApp, readDocumentBody, type RuntimeServices } from '../src/mcp-server/index';
 import {
   MAX_REQUEST_BODY_BYTES,
   MAX_TOOL_OUTPUT_BYTES,
-  RuntimeConfig
+  type RuntimeConfig
 } from '../src/mcp-server/runtime';
 
 interface TestResponse {
@@ -25,28 +21,33 @@ function request(
 ): Promise<TestResponse> {
   const address = server.address() as AddressInfo;
   return new Promise((resolve, reject) => {
-    const outgoing = http.request({
-      hostname: '127.0.0.1',
-      port: address.port,
-      path: '/mcp',
-      method: 'POST',
-      headers: {
-        host: 'mcp.example.com',
-        origin: 'https://app.example.com',
-        'content-type': 'application/json',
-        accept: 'application/json, text/event-stream',
-        'content-length': Buffer.byteLength(body).toString(),
-        ...headers
+    const outgoing = http.request(
+      {
+        hostname: '127.0.0.1',
+        port: address.port,
+        path: '/mcp',
+        method: 'POST',
+        headers: {
+          host: 'mcp.example.com',
+          origin: 'https://app.example.com',
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          'content-length': Buffer.byteLength(body).toString(),
+          ...headers
+        }
+      },
+      response => {
+        const chunks: Buffer[] = [];
+        response.on('data', chunk => chunks.push(Buffer.from(chunk)));
+        response.on('end', () =>
+          resolve({
+            status: response.statusCode || 0,
+            headers: response.headers,
+            body: Buffer.concat(chunks).toString('utf8')
+          })
+        );
       }
-    }, response => {
-      const chunks: Buffer[] = [];
-      response.on('data', chunk => chunks.push(Buffer.from(chunk)));
-      response.on('end', () => resolve({
-        status: response.statusCode || 0,
-        headers: response.headers,
-        body: Buffer.concat(chunks).toString('utf8')
-      }));
-    });
+    );
     outgoing.on('error', reject);
     outgoing.end(body);
   });
@@ -61,14 +62,18 @@ const config: RuntimeConfig = {
   port: 8080
 };
 
+const loadDocumentPage = vi.fn(async () => ({ keys: [] as Array<string | undefined> }));
+
 const services: RuntimeServices = {
-  search: vi.fn(async () => [{
-    content: 'x'.repeat(MAX_TOOL_OUTPUT_BYTES * 2),
-    location: { s3Uri: 's3://test-bucket/smithy-docs/large.md', type: 'S3' },
-    score: 0.9
-  }]),
+  search: vi.fn(async () => [
+    {
+      content: 'x'.repeat(MAX_TOOL_OUTPUT_BYTES * 2),
+      location: { s3Uri: 's3://test-bucket/smithy-docs/large.md', type: 'S3' },
+      score: 0.9
+    }
+  ]),
   getDocument: vi.fn(async () => undefined),
-  loadDocumentPage: vi.fn(async () => ({ keys: [] }))
+  loadDocumentPage
 };
 
 describe('MCP HTTP server', () => {
@@ -80,21 +85,22 @@ describe('MCP HTTP server', () => {
 
   afterAll(async () => {
     await new Promise<void>((resolve, reject) => {
-      server.close(error => error ? reject(error) : resolve());
+      server.close(error => (error ? reject(error) : resolve()));
     });
   });
 
   it('handles independent Streamable HTTP initialization requests', async () => {
-    const initialize = (id: number) => JSON.stringify({
-      jsonrpc: '2.0',
-      id,
-      method: 'initialize',
-      params: {
-        protocolVersion: '2025-03-26',
-        capabilities: {},
-        clientInfo: { name: 'unit-test', version: '1.0.0' }
-      }
-    });
+    const initialize = (id: number) =>
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: { name: 'unit-test', version: '1.0.0' }
+        }
+      });
 
     const first = await request(server, initialize(1));
     const second = await request(server, initialize(2));
@@ -115,9 +121,7 @@ describe('MCP HTTP server', () => {
     });
 
     expect(badHost.status).toBe(403);
-    expect(JSON.parse(badHost.body).error.message).toBe(
-      'Request host or origin is not allowed'
-    );
+    expect(JSON.parse(badHost.body).error.message).toBe('Request host or origin is not allowed');
     expect(badOrigin.status).toBe(403);
   });
 
@@ -141,23 +145,54 @@ describe('MCP HTTP server', () => {
   });
 
   it('bounds tool results without requiring AWS clients', async () => {
-    const response = await request(server, JSON.stringify({
-      jsonrpc: '2.0',
-      id: 3,
-      method: 'tools/call',
-      params: {
-        name: 'search_smithy_docs',
-        arguments: { query: 'large result', max_results: 1 }
-      }
-    }));
+    const response = await request(
+      server,
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 3,
+        method: 'tools/call',
+        params: {
+          name: 'search_smithy_docs',
+          arguments: { query: 'large result', max_results: 1 }
+        }
+      })
+    );
 
     expect(response.status).toBe(200);
     const text = JSON.parse(response.body).result.content[0].text as string;
     expect(Buffer.byteLength(text, 'utf8')).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_BYTES);
     expect(text).toContain('[Output truncated');
   });
-});
 
+  it('lists complete sorted paths with truthful included and discovered counts', async () => {
+    loadDocumentPage.mockResolvedValueOnce({
+      keys: [
+        `smithy-docs/z-${'x'.repeat(1_000)}.md`,
+        'smithy-docs/b.md',
+        'smithy-docs/',
+        'smithy-docs/a.md'
+      ]
+    });
+
+    const response = await request(
+      server,
+      JSON.stringify({
+        jsonrpc: '2.0',
+        id: 4,
+        method: 'tools/call',
+        params: { name: 'list_smithy_topics', arguments: {} }
+      })
+    );
+
+    expect(response.status).toBe(200);
+    const text = JSON.parse(response.body).result.content[0].text as string;
+    expect(text).toContain('Included: 3 of 3 discovered files');
+    expect(text.indexOf('- a.md')).toBeLessThan(text.indexOf('- b.md'));
+    expect(text.indexOf('- b.md')).toBeLessThan(text.indexOf('- z-'));
+    expect((text.match(/^- /gm) ?? []).length).toBe(3);
+    expect(Buffer.byteLength(text, 'utf8')).toBeLessThanOrEqual(MAX_TOOL_OUTPUT_BYTES);
+  });
+});
 
 describe('document stream bounding', () => {
   async function* body(...chunks: string[]) {

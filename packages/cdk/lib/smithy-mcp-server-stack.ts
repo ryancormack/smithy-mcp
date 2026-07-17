@@ -13,7 +13,7 @@ import * as route53Targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
-import { Construct } from 'constructs';
+import { type Construct } from 'constructs';
 
 export interface SmithyMcpServerStackProps extends cdk.StackProps {
   stage: string;
@@ -78,29 +78,35 @@ export class SmithyMcpServerStack extends cdk.Stack {
       }
     });
 
-    mcpFunction.addToRolePolicy(new iam.PolicyStatement({
-      sid: 'ListPublishedSmithyDocuments',
-      actions: ['s3:ListBucket'],
-      resources: [props.bucket.bucketArn],
-      conditions: { StringLike: { 's3:prefix': ['smithy-docs/*'] } }
-    }));
-    mcpFunction.addToRolePolicy(new iam.PolicyStatement({
-      sid: 'ReadPublishedSmithyDocuments',
-      actions: ['s3:GetObject'],
-      resources: [props.bucket.arnForObjects('smithy-docs/*')]
-    }));
-    mcpFunction.addToRolePolicy(new iam.PolicyStatement({
-      sid: 'RetrieveFromKnowledgeBaseOnly',
-      actions: ['bedrock:Retrieve'],
-      resources: [
-        cdk.Stack.of(this).formatArn({
-          service: 'bedrock',
-          region: props.resourceRegion,
-          resource: 'knowledge-base',
-          resourceName: props.knowledgeBaseId
-        })
-      ]
-    }));
+    mcpFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'ListPublishedSmithyDocuments',
+        actions: ['s3:ListBucket'],
+        resources: [props.bucket.bucketArn],
+        conditions: { StringLike: { 's3:prefix': ['smithy-docs/*'] } }
+      })
+    );
+    mcpFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadPublishedSmithyDocuments',
+        actions: ['s3:GetObject'],
+        resources: [props.bucket.arnForObjects('smithy-docs/*')]
+      })
+    );
+    mcpFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'RetrieveFromKnowledgeBaseOnly',
+        actions: ['bedrock:Retrieve'],
+        resources: [
+          cdk.Stack.of(this).formatArn({
+            service: 'bedrock',
+            region: props.resourceRegion,
+            resource: 'knowledge-base',
+            resourceName: props.knowledgeBaseId
+          })
+        ]
+      })
+    );
 
     const functionUrl = mcpFunction.addFunctionUrl({
       authType: lambda.FunctionUrlAuthType.AWS_IAM,
@@ -149,7 +155,8 @@ export class SmithyMcpServerStack extends cdk.Stack {
         responseHeadersPolicyName: `${props.resourcePrefix}-security-headers`,
         securityHeadersBehavior: {
           contentSecurityPolicy: {
-            contentSecurityPolicy: "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'",
+            contentSecurityPolicy:
+              "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'",
             override: true
           },
           contentTypeOptions: { override: true },
@@ -167,11 +174,13 @@ export class SmithyMcpServerStack extends cdk.Stack {
           xssProtection: { protection: true, modeBlock: true, override: true }
         },
         customHeadersBehavior: {
-          customHeaders: [{
-            header: 'Permissions-Policy',
-            value: 'camera=(), geolocation=(), microphone=()',
-            override: true
-          }]
+          customHeaders: [
+            {
+              header: 'Permissions-Policy',
+              value: 'camera=(), geolocation=(), microphone=()',
+              override: true
+            }
+          ]
         }
       }
     );
@@ -248,11 +257,13 @@ export class SmithyMcpServerStack extends cdk.Stack {
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
           responseHeadersPolicy,
-          edgeLambdas: [{
-            functionVersion: payloadHashVersion,
-            eventType: cloudfront.LambdaEdgeEventType.ORIGIN_REQUEST,
-            includeBody: true
-          }]
+          edgeLambdas: [
+            {
+              functionVersion: payloadHashVersion,
+              eventType: cloudfront.LambdaEdgeEventType.ORIGIN_REQUEST,
+              includeBody: true
+            }
+          ]
         }
       },
       defaultRootObject: 'index.html',
@@ -318,6 +329,18 @@ export class SmithyMcpServerStack extends cdk.Stack {
         statistic: 'p99'
       }),
       threshold: cdk.Duration.seconds(25).toMilliseconds(),
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+    });
+    new cloudwatch.Alarm(this, 'CloudFront5xxErrorRateAlarm', {
+      alarmName: `${props.resourcePrefix}-cloudfront-5xx-error-rate`,
+      metric: distribution.metric5xxErrorRate({
+        period: cdk.Duration.minutes(5),
+        statistic: 'Average'
+      }),
+      threshold: 5,
+      evaluationPeriods: 2,
+      datapointsToAlarm: 2,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
     });
 

@@ -13,7 +13,7 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3vectors from 'aws-cdk-lib/aws-s3vectors';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
-import { Construct } from 'constructs';
+import { type Construct } from 'constructs';
 
 const DOCUMENT_PREFIX = 'smithy-docs/';
 const STATE_PREFIX = 'smithy-mcp-state/';
@@ -59,10 +59,15 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       enforceSSL: true,
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       autoDeleteObjects: false,
-      lifecycleRules: [{
-        noncurrentVersionExpiration: cdk.Duration.days(90),
-        abortIncompleteMultipartUploadAfter: cdk.Duration.days(7)
-      }]
+      lifecycleRules: [
+        {
+          id: 'ExpireOrphanedStagingObjects',
+          prefix: STAGING_PREFIX,
+          expiration: cdk.Duration.days(2),
+          noncurrentVersionExpiration: cdk.Duration.days(2),
+          abortIncompleteMultipartUploadAfter: cdk.Duration.days(2)
+        }
+      ]
     });
 
     const vectorBucket = new s3vectors.CfnVectorBucket(this, 'SmithyVectorBucket', {
@@ -97,38 +102,48 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       }),
       description: `${props.stage} Bedrock knowledge base access to Smithy documents and vectors`
     });
-    knowledgeBaseRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'ReadPublishedSmithyDocuments',
-      actions: ['s3:GetObject'],
-      resources: [this.bucket.arnForObjects(`${DOCUMENT_PREFIX}*`)]
-    }));
-    knowledgeBaseRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'ListPublishedSmithyDocuments',
-      actions: ['s3:ListBucket'],
-      resources: [this.bucket.bucketArn],
-      conditions: { StringLike: { 's3:prefix': [`${DOCUMENT_PREFIX}*`] } }
-    }));
-    knowledgeBaseRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'CreateEmbeddings',
-      actions: ['bedrock:InvokeModel'],
-      resources: [embeddingModelArn]
-    }));
-    knowledgeBaseRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'InspectSmithyVectorBucket',
-      actions: ['s3vectors:GetVectorBucket'],
-      resources: [vectorBucket.attrVectorBucketArn]
-    }));
-    knowledgeBaseRole.addToPolicy(new iam.PolicyStatement({
-      sid: 'UseSmithyVectorIndex',
-      actions: [
-        's3vectors:GetIndex',
-        's3vectors:QueryVectors',
-        's3vectors:PutVectors',
-        's3vectors:GetVectors',
-        's3vectors:DeleteVectors'
-      ],
-      resources: [vectorIndex.attrIndexArn]
-    }));
+    knowledgeBaseRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadPublishedSmithyDocuments',
+        actions: ['s3:GetObject'],
+        resources: [this.bucket.arnForObjects(`${DOCUMENT_PREFIX}*`)]
+      })
+    );
+    knowledgeBaseRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'ListPublishedSmithyDocuments',
+        actions: ['s3:ListBucket'],
+        resources: [this.bucket.bucketArn],
+        conditions: { StringLike: { 's3:prefix': [`${DOCUMENT_PREFIX}*`] } }
+      })
+    );
+    knowledgeBaseRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'CreateEmbeddings',
+        actions: ['bedrock:InvokeModel'],
+        resources: [embeddingModelArn]
+      })
+    );
+    knowledgeBaseRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'InspectSmithyVectorBucket',
+        actions: ['s3vectors:GetVectorBucket'],
+        resources: [vectorBucket.attrVectorBucketArn]
+      })
+    );
+    knowledgeBaseRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: 'UseSmithyVectorIndex',
+        actions: [
+          's3vectors:GetIndex',
+          's3vectors:QueryVectors',
+          's3vectors:PutVectors',
+          's3vectors:GetVectors',
+          's3vectors:DeleteVectors'
+        ],
+        resources: [vectorIndex.attrIndexArn]
+      })
+    );
 
     const knowledgeBase = new bedrock.CfnKnowledgeBase(this, 'SmithyKnowledgeBase', {
       name: `${props.resourcePrefix}-kb`,
@@ -220,34 +235,36 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       }
     });
 
-    this.ingestionFunction.addToRolePolicy(new iam.PolicyStatement({
-      sid: 'ListIngestionNamespaces',
-      actions: ['s3:ListBucket'],
-      resources: [this.bucket.bucketArn],
-      conditions: {
-        StringLike: {
-          's3:prefix': [
-            `${DOCUMENT_PREFIX}*`,
-            `${STATE_PREFIX}*`,
-            `${STAGING_PREFIX}*`
-          ]
+    this.ingestionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'ListIngestionNamespaces',
+        actions: ['s3:ListBucket'],
+        resources: [this.bucket.bucketArn],
+        conditions: {
+          StringLike: {
+            's3:prefix': [`${DOCUMENT_PREFIX}*`, `${STATE_PREFIX}*`, `${STAGING_PREFIX}*`]
+          }
         }
-      }
-    }));
-    this.ingestionFunction.addToRolePolicy(new iam.PolicyStatement({
-      sid: 'PublishSmithyDocuments',
-      actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
-      resources: [
-        this.bucket.arnForObjects(`${DOCUMENT_PREFIX}*`),
-        this.bucket.arnForObjects(`${STATE_PREFIX}*`),
-        this.bucket.arnForObjects(`${STAGING_PREFIX}*`)
-      ]
-    }));
-    this.ingestionFunction.addToRolePolicy(new iam.PolicyStatement({
-      sid: 'SynchronizeKnowledgeBase',
-      actions: ['bedrock:StartIngestionJob', 'bedrock:GetIngestionJob'],
-      resources: [knowledgeBase.attrKnowledgeBaseArn]
-    }));
+      })
+    );
+    this.ingestionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'PublishSmithyDocuments',
+        actions: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject'],
+        resources: [
+          this.bucket.arnForObjects(`${DOCUMENT_PREFIX}*`),
+          this.bucket.arnForObjects(`${STATE_PREFIX}*`),
+          this.bucket.arnForObjects(`${STAGING_PREFIX}*`)
+        ]
+      })
+    );
+    this.ingestionFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'SynchronizeKnowledgeBase',
+        actions: ['bedrock:StartIngestionJob', 'bedrock:GetIngestionJob'],
+        resources: [knowledgeBase.attrKnowledgeBaseArn]
+      })
+    );
 
     const ingestionDeadLetterQueue = new sqs.Queue(this, 'IngestionDeadLetterQueue', {
       queueName: `${props.resourcePrefix}-ingestion-dlq`,
@@ -268,11 +285,13 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       description: `Refresh ${props.stage} Smithy documentation every Monday at 06:00 UTC`,
       schedule: events.Schedule.cron({ minute: '0', hour: '6', weekDay: 'MON' })
     });
-    schedule.addTarget(new targets.LambdaFunction(this.ingestionFunction, {
-      deadLetterQueue: ingestionDeadLetterQueue,
-      retryAttempts: 2,
-      maxEventAge: cdk.Duration.hours(2)
-    }));
+    schedule.addTarget(
+      new targets.LambdaFunction(this.ingestionFunction, {
+        deadLetterQueue: ingestionDeadLetterQueue,
+        retryAttempts: 2,
+        maxEventAge: cdk.Duration.hours(2)
+      })
+    );
 
     const alarmDefaults = {
       evaluationPeriods: 1,
@@ -307,10 +326,12 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     });
 
     if (props.budgetLimitUsd !== undefined && props.budgetNotificationEmail !== undefined) {
-      const subscribers = [{
-        subscriptionType: 'EMAIL',
-        address: props.budgetNotificationEmail
-      }];
+      const subscribers = [
+        {
+          subscriptionType: 'EMAIL',
+          address: props.budgetNotificationEmail
+        }
+      ];
       new budgets.CfnBudget(this, 'EnvironmentBudget', {
         budget: {
           budgetName: `${props.resourcePrefix}-monthly`,
@@ -319,15 +340,17 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
           budgetLimit: { amount: props.budgetLimitUsd, unit: 'USD' },
           costFilters: { TagKeyValue: [`user:Environment$${props.stage}`] }
         },
-        notificationsWithSubscribers: [{
-          notification: {
-            comparisonOperator: 'GREATER_THAN',
-            notificationType: 'FORECASTED',
-            threshold: 80,
-            thresholdType: 'PERCENTAGE'
-          },
-          subscribers
-        }]
+        notificationsWithSubscribers: [
+          {
+            notification: {
+              comparisonOperator: 'GREATER_THAN',
+              notificationType: 'FORECASTED',
+              threshold: 80,
+              thresholdType: 'PERCENTAGE'
+            },
+            subscribers
+          }
+        ]
       });
     }
 

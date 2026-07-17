@@ -1,8 +1,8 @@
 import {
-  BedrockAgentRuntimeClient,
+  type BedrockAgentRuntimeClient,
   RetrieveCommand
 } from '@aws-sdk/client-bedrock-agent-runtime';
-import { SearchResult } from '../common/types';
+import { type SearchResult } from '../common/types';
 
 export async function searchKnowledgeBase(
   client: BedrockAgentRuntimeClient,

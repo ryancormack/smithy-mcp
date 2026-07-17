@@ -32,7 +32,7 @@ describe('Bedrock ingestion polling', () => {
     await expect(
       startIngestionAndWait(options, {
         bedrock,
-        sleep: async (delay) => {
+        sleep: async delay => {
           delays.push(delay);
         }
       })
@@ -41,9 +41,24 @@ describe('Bedrock ingestion polling', () => {
     expect(delays).toEqual([10, 20, 40]);
   });
 
+  it('polls a persisted job ID without issuing another start request', async () => {
+    const commands: string[] = [];
+    const bedrock: BedrockSender = {
+      send: async command => {
+        commands.push(commandName(command));
+        return { ingestionJob: { status: 'COMPLETE' } };
+      }
+    };
+
+    await expect(
+      startIngestionAndWait({ ...options, ingestionJobId: 'JOB-PERSISTED' }, { bedrock })
+    ).resolves.toEqual({ ingestionJobId: 'JOB-PERSISTED', status: 'COMPLETE' });
+    expect(commands).toEqual(['GetIngestionJobCommand']);
+  });
+
   it.each(['FAILED', 'STOPPING', 'STOPPED', 'MYSTERY'])(
     'fails terminal or unknown status %s',
-    async (status) => {
+    async status => {
       const bedrock: BedrockSender = {
         send: async (command: unknown) =>
           commandName(command) === 'StartIngestionJobCommand'
@@ -65,9 +80,9 @@ describe('Bedrock ingestion polling', () => {
       }
     };
 
-    await expect(
-      startIngestionAndWait({ ...options, timeoutMs: 25 }, { bedrock })
-    ).rejects.toThrow('timed out');
+    await expect(startIngestionAndWait({ ...options, timeoutMs: 25 }, { bedrock })).rejects.toThrow(
+      'timed out'
+    );
   });
 
   it('fails when polling exceeds the bounded timeout', async () => {
@@ -83,7 +98,7 @@ describe('Bedrock ingestion polling', () => {
       startIngestionAndWait(options, {
         bedrock,
         now: () => now,
-        sleep: async (milliseconds) => {
+        sleep: async milliseconds => {
           now += milliseconds;
         }
       })

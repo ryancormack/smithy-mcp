@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import * as cdk from 'aws-cdk-lib';
 import { Match, Template } from 'aws-cdk-lib/assertions';
@@ -15,10 +17,12 @@ function knowledgeBaseTemplate(stage = 'staging', withBudget = true): Template {
     env,
     stage,
     resourcePrefix: `smithy-mcp-${stage}`,
-    ...(withBudget ? {
-      budgetLimitUsd: 25,
-      budgetNotificationEmail: 'alerts@example.com'
-    } : {})
+    ...(withBudget
+      ? {
+          budgetLimitUsd: 25,
+          budgetNotificationEmail: 'alerts@example.com'
+        }
+      : {})
   });
   return Template.fromStack(stack);
 }
@@ -74,26 +78,53 @@ test('creates an isolated S3 Vectors Bedrock knowledge base and data source', ()
     }
   });
   template.resourceCountIs('AWS::Budgets::Budget', 1);
-  knowledgeBaseTemplate('staging-no-budget', false)
-    .resourceCountIs('AWS::Budgets::Budget', 0);
+  knowledgeBaseTemplate('staging-no-budget', false).resourceCountIs('AWS::Budgets::Budget', 0);
   const renderedKnowledgeBase = JSON.stringify(template.toJSON());
   assert.match(renderedKnowledgeBase, /s3vectors:GetVectorBucket/);
   assert.match(renderedKnowledgeBase, /s3vectors:GetIndex/);
   template.hasResourceProperties('AWS::IAM::Role', {
     AssumeRolePolicyDocument: {
-      Statement: [Match.objectLike({
-        Principal: { Service: 'bedrock.amazonaws.com' },
-        Condition: {
-          StringEquals: { 'aws:SourceAccount': '111111111111' },
-          ArnLike: { 'AWS:SourceArn': Match.anyValue() }
-        }
-      })]
+      Statement: [
+        Match.objectLike({
+          Principal: { Service: 'bedrock.amazonaws.com' },
+          Condition: {
+            StringEquals: { 'aws:SourceAccount': '111111111111' },
+            ArnLike: { 'AWS:SourceArn': Match.anyValue() }
+          }
+        })
+      ]
     }
   });
 });
 
 test('configures scheduled root-context ingestion with bounded retries and exact access', () => {
   const template = knowledgeBaseTemplate();
+  template.hasResourceProperties('AWS::S3::Bucket', {
+    LifecycleConfiguration: {
+      Rules: [
+        {
+          Id: 'ExpireOrphanedStagingObjects',
+          Prefix: 'smithy-mcp-staging/',
+          Status: 'Enabled',
+          ExpirationInDays: 2,
+          NoncurrentVersionExpiration: { NoncurrentDays: 2 },
+          AbortIncompleteMultipartUpload: { DaysAfterInitiation: 2 }
+        }
+      ]
+    }
+  });
+  const bucket = Object.values(
+    template.findResources('AWS::S3::Bucket') as Record<
+      string,
+      { Properties?: { LifecycleConfiguration?: unknown } }
+    >
+  ).find(resource => resource.Properties?.LifecycleConfiguration);
+  assert.ok(bucket);
+  assert.doesNotMatch(
+    JSON.stringify(bucket.Properties?.LifecycleConfiguration),
+    /smithy-docs|smithy-mcp-state/
+  );
+
   template.hasResourceProperties('AWS::Lambda::Function', {
     FunctionName: 'smithy-mcp-staging-ingestion',
     PackageType: 'Image',
@@ -103,18 +134,22 @@ test('configures scheduled root-context ingestion with bounded retries and exact
     ReservedConcurrentExecutions: 1,
     TracingConfig: { Mode: 'Active' },
     EphemeralStorage: { Size: 4096 },
-    Environment: { Variables: Match.objectLike({
-      KNOWLEDGE_BASE_ID: Match.anyValue(),
-      DATA_SOURCE_ID: Match.anyValue(),
-      DOCS_PREFIX: 'smithy-docs/'
-    }) }
+    Environment: {
+      Variables: Match.objectLike({
+        KNOWLEDGE_BASE_ID: Match.anyValue(),
+        DATA_SOURCE_ID: Match.anyValue(),
+        DOCS_PREFIX: 'smithy-docs/'
+      })
+    }
   });
   template.hasResourceProperties('AWS::Events::Rule', {
     ScheduleExpression: 'cron(0 6 ? * MON *)',
-    Targets: [Match.objectLike({
-      DeadLetterConfig: Match.objectLike({ Arn: Match.anyValue() }),
-      RetryPolicy: { MaximumEventAgeInSeconds: 7200, MaximumRetryAttempts: 2 }
-    })]
+    Targets: [
+      Match.objectLike({
+        DeadLetterConfig: Match.objectLike({ Arn: Match.anyValue() }),
+        RetryPolicy: { MaximumEventAgeInSeconds: 7200, MaximumRetryAttempts: 2 }
+      })
+    ]
   });
   template.hasResourceProperties('AWS::Lambda::EventInvokeConfig', {
     MaximumEventAgeInSeconds: 7200,
@@ -163,23 +198,29 @@ test('exposes only exact mcp path through CloudFront and an IAM-authenticated fu
     PackageType: 'Image',
     ReservedConcurrentExecutions: 10,
     TracingConfig: { Mode: 'Active' },
-    Environment: { Variables: Match.objectLike({
-      AWS_RESOURCE_REGION: 'us-west-2',
-      MCP_ALLOWED_HOSTS: 'staging.example.com',
-      MCP_ALLOWED_ORIGINS: 'https://staging.example.com'
-    }) }
+    Environment: {
+      Variables: Match.objectLike({
+        AWS_RESOURCE_REGION: 'us-west-2',
+        MCP_ALLOWED_HOSTS: 'staging.example.com',
+        MCP_ALLOWED_ORIGINS: 'https://staging.example.com'
+      })
+    }
   });
   template.hasResourceProperties('AWS::CloudFront::Distribution', {
     DistributionConfig: Match.objectLike({
       Aliases: ['staging.example.com'],
       Enabled: true,
-      CacheBehaviors: [Match.objectLike({
-        PathPattern: '/mcp',
-        LambdaFunctionAssociations: [Match.objectLike({
-          EventType: 'origin-request',
-          IncludeBody: true
-        })]
-      })],
+      CacheBehaviors: [
+        Match.objectLike({
+          PathPattern: '/mcp',
+          LambdaFunctionAssociations: [
+            Match.objectLike({
+              EventType: 'origin-request',
+              IncludeBody: true
+            })
+          ]
+        })
+      ],
       WebACLId: Match.anyValue()
     })
   });
@@ -209,10 +250,14 @@ test('exposes only exact mcp path through CloudFront and an IAM-authenticated fu
   const renderedTemplate = template.toJSON();
   const rendered = JSON.stringify(renderedTemplate);
   const mcpFunction = Object.values(
-    renderedTemplate.Resources as Record<string, { Type: string; Properties: Record<string, unknown> }>
-  ).find(resource =>
-    resource.Type === 'AWS::Lambda::Function' &&
-    resource.Properties.FunctionName === 'smithy-mcp-staging-server'
+    renderedTemplate.Resources as Record<
+      string,
+      { Type: string; Properties: Record<string, unknown> }
+    >
+  ).find(
+    resource =>
+      resource.Type === 'AWS::Lambda::Function' &&
+      resource.Properties.FunctionName === 'smithy-mcp-staging-server'
   );
   assert.ok(mcpFunction);
   assert.equal(mcpFunction.Properties.Layers, undefined);
@@ -229,6 +274,38 @@ test('exposes only exact mcp path through CloudFront and an IAM-authenticated fu
     'the direct Lambda Function URL must not be output'
   );
   assert.doesNotMatch(JSON.stringify(outputs), /FunctionUrl/);
+
+  template.hasResourceProperties('AWS::CloudFront::ResponseHeadersPolicy', {
+    ResponseHeadersPolicyConfig: Match.objectLike({
+      SecurityHeadersConfig: Match.objectLike({
+        ContentSecurityPolicy: {
+          ContentSecurityPolicy:
+            "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'",
+          Override: true
+        }
+      })
+    })
+  });
+  const indexHtml = readFileSync(path.resolve(__dirname, '../src/index.html'), 'utf8');
+  const styles = readFileSync(path.resolve(__dirname, '../src/styles.css'), 'utf8');
+  assert.match(indexHtml, /<link rel="stylesheet" href="\/styles\.css" \/>/);
+  assert.doesNotMatch(indexHtml, /<style(?:\s|>)/i);
+  assert.match(styles, /\.container\s*\{/);
+
+  template.hasResourceProperties('AWS::CloudWatch::Alarm', {
+    AlarmName: 'smithy-mcp-staging-cloudfront-5xx-error-rate',
+    Namespace: 'AWS/CloudFront',
+    MetricName: '5xxErrorRate',
+    Dimensions: [{ Name: 'DistributionId', Value: Match.anyValue() }],
+    Statistic: 'Average',
+    Period: 300,
+    Threshold: 5,
+    EvaluationPeriods: 2,
+    DatapointsToAlarm: 2,
+    ComparisonOperator: 'GreaterThanOrEqualToThreshold',
+    TreatMissingData: 'notBreaching'
+  });
+  template.resourceCountIs('AWS::CloudWatch::Alarm', 4);
 });
 
 test('retains logs and isolates stage-qualified names and concurrency', () => {
@@ -243,8 +320,9 @@ test('retains logs and isolates stage-qualified names and concurrency', () => {
   assert.match(productionText, /"ReservedConcurrentExecutions":50/);
 
   for (const template of [staging, production]) {
-    const logGroups = Object.values(template.Resources as Record<string, { Type: string; DeletionPolicy?: string }> )
-      .filter(resource => resource.Type === 'AWS::Logs::LogGroup');
+    const logGroups = Object.values(
+      template.Resources as Record<string, { Type: string; DeletionPolicy?: string }>
+    ).filter(resource => resource.Type === 'AWS::Logs::LogGroup');
     assert.ok(logGroups.length >= 1);
     assert.ok(logGroups.every(resource => resource.DeletionPolicy === 'Retain'));
   }

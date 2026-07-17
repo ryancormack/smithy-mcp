@@ -1,0 +1,51 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Etc/UTC
+    groups:
+      production-dependencies:
+        dependency-type: production
+      development-dependencies:
+        dependency-type: development
+    open-pull-requests-limit: 10
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Etc/UTC
+    groups:
+      github-actions:
+        patterns: ['*']
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /packages/cdk/docker
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Etc/UTC
+    groups:
+      mcp-runtime-images:
+        patterns: ['*']
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: docker
+    directory: /packages/ingestion
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Etc/UTC
+    groups:
+      ingestion-runtime-images:
+        patterns: ['*']
+    open-pull-requests-limit: 5

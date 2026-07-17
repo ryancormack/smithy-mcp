@@ -47,10 +47,7 @@ export class InvalidDocumentPathError extends Error {
   }
 }
 
-function requireEnvironmentValue(
-  environment: NodeJS.ProcessEnv,
-  name: string
-): string {
+function requireEnvironmentValue(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name]?.trim();
   if (!value) {
     throw new ConfigurationError(`${name} is required`);
@@ -59,7 +56,10 @@ function requireEnvironmentValue(
 }
 
 function parseList(value: string, name: string): string[] {
-  const entries = value.split(',').map(entry => entry.trim()).filter(Boolean);
+  const entries = value
+    .split(',')
+    .map(entry => entry.trim())
+    .filter(Boolean);
   if (entries.length === 0) {
     throw new ConfigurationError(`${name} must contain at least one value`);
   }
@@ -116,9 +116,7 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-export function loadRuntimeConfig(
-  environment: NodeJS.ProcessEnv = process.env
-): RuntimeConfig {
+export function loadRuntimeConfig(environment: NodeJS.ProcessEnv = process.env): RuntimeConfig {
   const bucketName = requireEnvironmentValue(environment, 'BUCKET_NAME');
   const knowledgeBaseId = requireEnvironmentValue(environment, 'KNOWLEDGE_BASE_ID');
   const resourceRegion = requireEnvironmentValue(environment, 'AWS_RESOURCE_REGION');
@@ -126,12 +124,15 @@ export function loadRuntimeConfig(
     throw new ConfigurationError('AWS_RESOURCE_REGION must be a valid AWS region');
   }
   const allowedHosts = unique(
-    parseList(requireEnvironmentValue(environment, 'MCP_ALLOWED_HOSTS'), 'MCP_ALLOWED_HOSTS')
-      .map(normalizeHost)
+    parseList(requireEnvironmentValue(environment, 'MCP_ALLOWED_HOSTS'), 'MCP_ALLOWED_HOSTS').map(
+      normalizeHost
+    )
   );
   const allowedOrigins = unique(
-    parseList(requireEnvironmentValue(environment, 'MCP_ALLOWED_ORIGINS'), 'MCP_ALLOWED_ORIGINS')
-      .map(normalizeOrigin)
+    parseList(
+      requireEnvironmentValue(environment, 'MCP_ALLOWED_ORIGINS'),
+      'MCP_ALLOWED_ORIGINS'
+    ).map(normalizeOrigin)
   );
   const portValue = environment.PORT?.trim() || '8080';
   const port = Number(portValue);
@@ -220,10 +221,7 @@ export function canonicalizeDocumentKey(filePath: string): string {
   return key;
 }
 
-export function boundUtf8Text(
-  text: string,
-  maxBytes: number = MAX_TOOL_OUTPUT_BYTES
-): string {
+export function boundUtf8Text(text: string, maxBytes: number = MAX_TOOL_OUTPUT_BYTES): string {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < Buffer.byteLength(TRUNCATION_NOTICE)) {
     throw new RangeError('maxBytes is too small');
   }
@@ -239,6 +237,50 @@ export function boundUtf8Text(
     prefix = prefix.slice(0, -1);
   }
   return `${prefix}${TRUNCATION_NOTICE}`;
+}
+
+export function renderDocumentList(
+  files: readonly string[],
+  sourceTruncated: boolean,
+  maxBytes: number = MAX_TOOL_OUTPUT_BYTES
+): string {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 256) {
+    throw new RangeError('maxBytes is too small');
+  }
+
+  const total = files.length;
+  const header = (included: number) =>
+    `# Smithy Documentation\n\nIncluded: ${included} of ${total} discovered files\n\n`;
+  const sourceNotice = sourceTruncated
+    ? `\n[Listing discovery stopped after ${MAX_LISTED_DOCUMENTS} keys; additional files may exist.]`
+    : '';
+  const outputNotice = TRUNCATION_NOTICE;
+  const lines = files.map(file => `- ${file}\n`);
+  const complete = `${header(total)}${lines.join('')}${sourceNotice}`;
+  if (Buffer.byteLength(complete, 'utf8') <= maxBytes) {
+    return complete;
+  }
+
+  // Reserve using the largest possible included-count width, then add only
+  // complete paths. The final header can only be the same size or smaller.
+  const fixedBytes = Buffer.byteLength(`${header(total)}${sourceNotice}${outputNotice}`, 'utf8');
+  let included = 0;
+  let lineBytes = 0;
+  for (const line of lines) {
+    const nextBytes = Buffer.byteLength(line, 'utf8');
+    if (fixedBytes + lineBytes + nextBytes > maxBytes) {
+      break;
+    }
+    lineBytes += nextBytes;
+    included += 1;
+  }
+
+  let result = `${header(included)}${lines.slice(0, included).join('')}${sourceNotice}${outputNotice}`;
+  while (included > 0 && Buffer.byteLength(result, 'utf8') > maxBytes) {
+    included -= 1;
+    result = `${header(included)}${lines.slice(0, included).join('')}${sourceNotice}${outputNotice}`;
+  }
+  return result;
 }
 
 export async function collectPaginatedKeys(

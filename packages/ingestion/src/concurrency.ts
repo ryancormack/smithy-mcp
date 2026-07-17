@@ -31,7 +31,9 @@ export async function mapWithConcurrency<T, R>(
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
   if (firstError !== undefined) {
-    throw firstError;
+    throw firstError instanceof Error
+      ? firstError
+      : new Error('Concurrent operation failed', { cause: firstError });
   }
 
   return results;

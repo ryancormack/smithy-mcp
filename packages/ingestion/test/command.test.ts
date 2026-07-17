@@ -15,21 +15,19 @@ describe('bounded shell-free command execution', () => {
 
   it('kills commands that exceed the output bound', async () => {
     await expect(
-      runCommand(
-        process.execPath,
-        ['-e', 'process.stdout.write("x".repeat(2048))'],
-        { timeoutMs: 1_000, maxOutputBytes: 128 }
-      )
+      runCommand(process.execPath, ['-e', 'process.stdout.write("x".repeat(2048))'], {
+        timeoutMs: 1_000,
+        maxOutputBytes: 128
+      })
     ).rejects.toThrow('output limit');
   });
 
   it('kills commands that exceed the time bound', async () => {
     await expect(
-      runCommand(
-        process.execPath,
-        ['-e', 'setInterval(() => undefined, 1000)'],
-        { timeoutMs: 25, maxOutputBytes: 128 }
-      )
+      runCommand(process.execPath, ['-e', 'setInterval(() => undefined, 1000)'], {
+        timeoutMs: 25,
+        maxOutputBytes: 128
+      })
     ).rejects.toThrow('timed out');
   });
 });

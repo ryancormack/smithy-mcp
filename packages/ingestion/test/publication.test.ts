@@ -26,7 +26,10 @@ function isLockPut(details: { name: string; input: Record<string, unknown> }): b
   return details.name === 'PutObjectCommand' && details.input.Key === LOCK_KEY;
 }
 
-function defaultS3Response(details: { name: string; input: Record<string, unknown> }): Record<string, unknown> {
+function defaultS3Response(details: {
+  name: string;
+  input: Record<string, unknown>;
+}): Record<string, unknown> {
   return isLockPut(details) ? { ETag: '"lock-etag"' } : {};
 }
 
@@ -55,13 +58,15 @@ function validManifest(upstreamSha = 'b'.repeat(40)): PublicationManifest {
     sourceRepository: options.sourceRepository,
     sourceRef: options.sourceRef,
     upstreamSha,
-    documents: [{
-      key: `${DOCS_PREFIX}a.md`,
-      path: 'a.md',
-      sha256: 'c'.repeat(64),
-      bytes: 1,
-      contentType: 'text/markdown; charset=utf-8'
-    }]
+    documents: [
+      {
+        key: `${DOCS_PREFIX}a.md`,
+        path: 'a.md',
+        sha256: 'c'.repeat(64),
+        bytes: 1,
+        contentType: 'text/markdown; charset=utf-8'
+      }
+    ]
   };
 }
 
@@ -107,12 +112,12 @@ describe('staged S3 publication', () => {
     expect(MANIFEST_KEY.startsWith(DOCS_PREFIX)).toBe(false);
     expect(LOCK_KEY.startsWith(DOCS_PREFIX)).toBe(false);
     const lockTransition = calls.find(
-      (call) => isLockPut(call) && call.input.IfMatch === '"lock-etag"'
+      call => isLockPut(call) && call.input.IfMatch === '"lock-etag"'
     );
     expect(lockTransition?.input.Body).toContain('"phase":"publishing"');
     const stagePrefix = publicationStagingPrefix(DOCS_PREFIX, 'fixed-stage');
     const stagePut = calls.find(
-      (call) => call.name === 'PutObjectCommand' && String(call.input.Key).startsWith(stagePrefix)
+      call => call.name === 'PutObjectCommand' && String(call.input.Key).startsWith(stagePrefix)
     );
     expect(stagePut?.input.Key).toBe(`${stagePrefix}a.md`);
     expect(String(stagePut?.input.Key).startsWith(DOCS_PREFIX)).toBe(false);
@@ -122,20 +127,19 @@ describe('staged S3 publication', () => {
       'upstream-sha': options.upstreamSha
     });
     expect(listPage).toBe(2);
-    const deletes = calls.filter((call) => call.name === 'DeleteObjectsCommand');
+    const deletes = calls.filter(call => call.name === 'DeleteObjectsCommand');
     expect(JSON.stringify(deletes)).toContain('smithy-docs/stale-1.md');
     expect(JSON.stringify(deletes)).toContain('smithy-docs/stale-2.md');
     expect(JSON.stringify(deletes)).toContain(`${stagePrefix}a.md`);
     expect(JSON.stringify(deletes)).not.toContain(MANIFEST_KEY);
     expect(JSON.stringify(deletes)).not.toContain(LOCK_KEY);
     expect(JSON.stringify(deletes)).not.toContain('smithy-docs/legacy-control.json');
-    const listCalls = calls.filter((call) => call.name === 'ListObjectsV2Command');
-    expect(listCalls.every((call) => call.input.Prefix === DOCS_PREFIX)).toBe(true);
+    const listCalls = calls.filter(call => call.name === 'ListObjectsV2Command');
+    expect(listCalls.every(call => call.input.Prefix === DOCS_PREFIX)).toBe(true);
 
     const manifestCallIndex = calls.findIndex(isManifestPut);
     const lockReleaseIndex = calls.findIndex(
-      (call) => call.name === 'DeleteObjectCommand' &&
-        call.input.Key === LOCK_KEY
+      call => call.name === 'DeleteObjectCommand' && call.input.Key === LOCK_KEY
     );
     expect(manifestCallIndex).toBeGreaterThan(-1);
     expect(lockReleaseIndex).toBe(manifestCallIndex + 1);
@@ -219,7 +223,7 @@ describe('staged S3 publication', () => {
     const previousOptions = { ...options, upstreamSha: 'b'.repeat(40) };
     let existingBody = '';
     const bootstrap: S3Sender = {
-      send: async (command) => {
+      send: async command => {
         const details = commandDetails(command);
         if (details.name === 'GetObjectCommand') {
           throw Object.assign(new Error('missing'), { name: 'NoSuchKey' });
@@ -250,12 +254,17 @@ describe('staged S3 publication', () => {
     };
 
     await expect(
-      publishToS3(files, { ...options, forceRefresh: true }, { s3, createStageId: () => 'copy-failure' })
+      publishToS3(
+        files,
+        { ...options, forceRefresh: true },
+        { s3, createStageId: () => 'copy-failure' }
+      )
     ).rejects.toBe(failure);
 
     expect(calls.some(isManifestPut)).toBe(false);
-    expect(JSON.stringify(calls.filter((call) => call.name === 'DeleteObjectsCommand')))
-      .toContain(`${publicationStagingPrefix(DOCS_PREFIX, 'copy-failure')}a.md`);
+    expect(JSON.stringify(calls.filter(call => call.name === 'DeleteObjectsCommand'))).toContain(
+      `${publicationStagingPrefix(DOCS_PREFIX, 'copy-failure')}a.md`
+    );
   });
 
   it('cleans successfully staged objects after a partial stage failure', async () => {
@@ -285,7 +294,7 @@ describe('staged S3 publication', () => {
     await expect(
       publishToS3(twoFiles, options, { s3, createStageId: () => 'failed-stage' })
     ).rejects.toBe(failure);
-    const cleanup = JSON.stringify(calls.filter((call) => call.name === 'DeleteObjectsCommand'));
+    const cleanup = JSON.stringify(calls.filter(call => call.name === 'DeleteObjectsCommand'));
     expect(cleanup).toContain(`${publicationStagingPrefix(DOCS_PREFIX, 'failed-stage')}a.md`);
     expect(cleanup).toContain(`${publicationStagingPrefix(DOCS_PREFIX, 'failed-stage')}b.md`);
     expect(calls.some(isManifestPut)).toBe(false);
@@ -316,16 +325,19 @@ describe('staged S3 publication', () => {
       }
     };
 
-    await expect(publishToS3(files, options, {
-      s3,
-      createStageId: () => 'contending-run',
-      now: () => 1_000
-    })).rejects.toThrow('Another publication is in progress');
+    await expect(
+      publishToS3(files, options, {
+        s3,
+        createStageId: () => 'contending-run',
+        now: () => 1_000
+      })
+    ).rejects.toThrow('Another publication is in progress');
 
-    expect(calls.some((call) => call.name === 'CopyObjectCommand')).toBe(false);
+    expect(calls.some(call => call.name === 'CopyObjectCommand')).toBe(false);
     expect(calls.some(isManifestPut)).toBe(false);
-    expect(JSON.stringify(calls.filter((call) => call.name === 'DeleteObjectsCommand')))
-      .toContain(`${publicationStagingPrefix(DOCS_PREFIX, 'contending-run')}a.md`);
+    expect(JSON.stringify(calls.filter(call => call.name === 'DeleteObjectsCommand'))).toContain(
+      `${publicationStagingPrefix(DOCS_PREFIX, 'contending-run')}a.md`
+    );
   });
 
   it('aborts before live mutation when publication state changes before lock acquisition', async () => {
@@ -345,18 +357,24 @@ describe('staged S3 publication', () => {
       }
     };
 
-    await expect(publishToS3(files, { ...options, forceRefresh: true }, {
-      s3,
-      createStageId: () => 'stale-reader'
-    })).rejects.toMatchObject({
+    await expect(
+      publishToS3(
+        files,
+        { ...options, forceRefresh: true },
+        {
+          s3,
+          createStageId: () => 'stale-reader'
+        }
+      )
+    ).rejects.toMatchObject({
       name: 'PublicationStateChangedError',
       retryable: true
     });
 
     expect(manifestReadCount).toBe(2);
-    expect(calls.some((call) => call.name === 'CopyObjectCommand')).toBe(false);
-    expect(calls.some((call) => call.name === 'ListObjectsV2Command')).toBe(false);
-    const deletedKeys = JSON.stringify(calls.filter((call) => call.name === 'DeleteObjectsCommand'));
+    expect(calls.some(call => call.name === 'CopyObjectCommand')).toBe(false);
+    expect(calls.some(call => call.name === 'ListObjectsV2Command')).toBe(false);
+    const deletedKeys = JSON.stringify(calls.filter(call => call.name === 'DeleteObjectsCommand'));
     expect(deletedKeys).toContain(`${publicationStagingPrefix(DOCS_PREFIX, 'stale-reader')}a.md`);
     expect(deletedKeys).not.toContain(`${DOCS_PREFIX}a.md`);
   });
@@ -398,15 +416,17 @@ describe('staged S3 publication', () => {
       }
     };
 
-    await expect(publishToS3(files, options, {
-      s3,
-      createStageId: () => 'takeover-run',
-      now: () => 1_000
-    })).resolves.toMatchObject({ changed: true });
+    await expect(
+      publishToS3(files, options, {
+        s3,
+        createStageId: () => 'takeover-run',
+        now: () => 1_000
+      })
+    ).resolves.toMatchObject({ changed: true });
 
     expect(LOCK_KEY.startsWith(DOCS_PREFIX)).toBe(false);
     const lockDeletes = calls.filter(
-      (call) => call.name === 'DeleteObjectCommand' && call.input.Key === LOCK_KEY
+      call => call.name === 'DeleteObjectCommand' && call.input.Key === LOCK_KEY
     );
     expect(lockDeletes).toEqual([
       expect.objectContaining({ input: expect.objectContaining({ IfMatch: '"expired-lock"' }) }),
@@ -443,24 +463,32 @@ describe('staged S3 publication', () => {
       }
     };
 
-    await expect(publishToS3(files, options, {
-      s3,
-      createStageId: () => 'blocked-takeover',
-      now: () => 1_000
-    })).rejects.toThrow('Expired publishing lock requires manual recovery');
+    await expect(
+      publishToS3(files, options, {
+        s3,
+        createStageId: () => 'blocked-takeover',
+        now: () => 1_000
+      })
+    ).rejects.toThrow('Expired publishing lock requires manual recovery');
 
-    expect(calls.some((call) => call.name === 'CopyObjectCommand')).toBe(false);
-    expect(calls.some((call) => call.name === 'ListObjectsV2Command')).toBe(false);
-    expect(calls.some((call) => call.name === 'DeleteObjectCommand')).toBe(false);
+    expect(calls.some(call => call.name === 'CopyObjectCommand')).toBe(false);
+    expect(calls.some(call => call.name === 'ListObjectsV2Command')).toBe(false);
+    expect(calls.some(call => call.name === 'DeleteObjectCommand')).toBe(false);
   });
 
   it('rejects a live docs prefix that overlaps an internal namespace', async () => {
     const send = vi.fn(async () => ({}));
 
-    await expect(publishToS3(files, {
-      ...options,
-      prefix: 'smithy-mcp-staging/nested/'
-    }, { s3: { send } })).rejects.toThrow('collides with an internal S3 namespace');
+    await expect(
+      publishToS3(
+        files,
+        {
+          ...options,
+          prefix: 'smithy-mcp-staging/nested/'
+        },
+        { s3: { send } }
+      )
+    ).rejects.toThrow('collides with an internal S3 namespace');
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -471,8 +499,9 @@ describe('staged S3 publication', () => {
       send: async () => ({ Body: JSON.stringify(manifest), ETag: '"etag"' })
     };
 
-    await expect(readPublicationState(s3, options.bucketName, DOCS_PREFIX))
-      .rejects.toThrow('Existing publication manifest is invalid');
+    await expect(readPublicationState(s3, options.bucketName, DOCS_PREFIX)).rejects.toThrow(
+      'Existing publication manifest is invalid'
+    );
   });
 
   it('rejects duplicate manifest paths and keys', async () => {
@@ -482,7 +511,8 @@ describe('staged S3 publication', () => {
       send: async () => ({ Body: JSON.stringify(manifest), ETag: '"etag"' })
     };
 
-    await expect(readPublicationState(s3, options.bucketName, DOCS_PREFIX))
-      .rejects.toThrow('Existing publication manifest is invalid');
+    await expect(readPublicationState(s3, options.bucketName, DOCS_PREFIX)).rejects.toThrow(
+      'Existing publication manifest is invalid'
+    );
   });
 });

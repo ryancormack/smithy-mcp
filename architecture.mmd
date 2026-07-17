@@ -1,12 +1,70 @@
-graph TD
-    A[Smithy Docs<br/>GitHub] -->|Clone & Convert| B[Ingestion Script]
-    B -->|Upload Markdown| C[S3 Bucket<br/>Documentation]
-    C -->|Ingest & Embed| D[Bedrock Knowledge Base]
-    D -->|Store Vectors| E[S3 Bucket<br/>Vector Store]
-    D -->|Query| F[Lambda Function<br/>MCP Server]
-    F -->|MCP Protocol| G[Kiro or any MCP Client]
-    
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style D fill:#ff9,stroke:#333,stroke-width:2px
-    style F fill:#9f9,stroke:#333,stroke-width:2px
-    style G fill:#99f,stroke:#333,stroke-width:2px
+flowchart LR
+    Client["MCP client"]
+
+    subgraph Edge["Edge and server region: us-east-1"]
+        DNS["Route 53 A and AAAA aliases"]
+        ACM["ACM certificate"]
+        WAF["AWS WAF<br/>per-IP rate limit and 64 KiB body limit"]
+        CF["CloudFront<br/>exact /mcp behavior, cache disabled"]
+        Static["Private S3 bucket origin with OAC<br/>default behavior"]
+        Hash["Lambda@Edge origin request<br/>SHA-256 of request body"]
+        OAC["CloudFront OAC<br/>SigV4 origin signing"]
+        URL["Lambda Function URL<br/>AWS_IAM, CloudFront-only permission"]
+        MCP["MCP Lambda container<br/>host and origin validation"]
+    end
+
+    subgraph Workload["Configured workload region"]
+        Schedule["EventBridge<br/>Monday 06:00 UTC"]
+        Ingest["Ingestion Lambda container<br/>reserved concurrency 1"]
+        Docs["Versioned private S3 bucket<br/>live: smithy-docs/"]
+        State["S3 control state<br/>smithy-mcp-state/prefix-hash/"]
+        Stage["S3 staging<br/>smithy-mcp-staging/prefix-hash/UUID/<br/>2-day lifecycle"]
+        DataSource["Bedrock S3 data source<br/>fixed 300-token chunks, 20% overlap"]
+        KB["Bedrock Knowledge Base<br/>Titan Text Embeddings v2, 1024 dimensions"]
+        Vectors["S3 Vectors<br/>float32 cosine index"]
+        DLQ["Encrypted SQS DLQ<br/>14-day retention"]
+        Alarms["CloudWatch alarms<br/>ingestion, MCP, DLQ, CloudFront 5xx"]
+    end
+
+    Source["smithy-lang/smithy GitHub<br/>docs/source-2.0 at configured ref"]
+
+    Client -->|"HTTPS POST /mcp"| DNS
+    DNS --> CF
+    ACM -.->|"TLS"| CF
+    WAF -.->|"associated"| CF
+    CF -->|"other paths"| Static
+    CF -->|"origin request with body"| Hash
+    Hash --> OAC
+    OAC -->|"signed request"| URL
+    URL --> MCP
+
+    MCP -->|"S3 List and Get live Markdown"| Docs
+    MCP -->|"bedrock:Retrieve"| KB
+
+    Schedule --> Ingest
+    Schedule -.->|"failed target"| DLQ
+    Ingest -.->|"failed async invocation"| DLQ
+    Source -->|"sparse Git fetch and RST to Markdown"| Ingest
+    Ingest -->|"checksummed upload"| Stage
+    Ingest -->|"conditional lock, manifest, sync state"| State
+    Stage -->|"copy then remove stale live keys"| Docs
+    Docs --> DataSource
+    Ingest -->|"start and poll ingestion job"| DataSource
+    DataSource --> KB
+    KB --> Vectors
+
+    Pipeline["GitHub Actions<br/>CI, OIDC deploy, synchronous ingestion,<br/>initialize/list/read/search readiness"]
+    Pipeline -.->|"deploy edge and workload stacks"| CF
+    Pipeline -.->|"deploy and invoke"| Ingest
+    CF -.->|"5xx error rate"| Alarms
+    Ingest -.->|"errors, duration, DLQ"| Alarms
+    MCP -.->|"errors, throttles, duration"| Alarms
+
+    classDef public fill:#dbeafe,stroke:#1d4ed8,color:#172554
+    classDef edge fill:#ede9fe,stroke:#6d28d9,color:#2e1065
+    classDef workload fill:#dcfce7,stroke:#15803d,color:#052e16
+    classDef control fill:#fef3c7,stroke:#b45309,color:#451a03
+    class Client,DNS public
+    class ACM,WAF,CF,Static,Hash,OAC,URL,MCP edge
+    class Schedule,Ingest,Docs,DataSource,KB,Vectors,DLQ,Alarms workload
+    class State,Stage,Source,Pipeline control

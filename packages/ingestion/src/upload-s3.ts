@@ -159,36 +159,43 @@ function validateManifest(value: unknown, docsPrefix: string): PublicationManife
   if (typeof value !== 'object' || value === null) {
     throw new Error('Existing publication manifest is invalid');
   }
-  const candidate = value as Partial<PublicationManifest>;
+  const candidate = value as Partial<Record<keyof PublicationManifest, unknown>>;
+  const documents = candidate.documents;
   if (
     candidate.version !== 1 ||
     typeof candidate.sourceRepository !== 'string' ||
     typeof candidate.sourceRef !== 'string' ||
     typeof candidate.upstreamSha !== 'string' ||
     !/^[0-9a-f]{40,64}$/.test(candidate.upstreamSha) ||
-    !Array.isArray(candidate.documents) ||
-    candidate.documents.length > MAX_LISTED_OBJECTS ||
-    candidate.documents.some(
-      (document) =>
+    !Array.isArray(documents) ||
+    documents.length > MAX_LISTED_OBJECTS ||
+    documents.some(
+      (document: unknown) =>
         typeof document !== 'object' ||
         document === null ||
+        !('key' in document) ||
         typeof document.key !== 'string' ||
+        !('path' in document) ||
         typeof document.path !== 'string' ||
+        !('sha256' in document) ||
         typeof document.sha256 !== 'string' ||
         !/^[0-9a-f]{64}$/.test(document.sha256) ||
+        !('bytes' in document) ||
         typeof document.bytes !== 'number' ||
         !Number.isSafeInteger(document.bytes) ||
         document.bytes < 0 ||
+        !('contentType' in document) ||
         document.contentType !== CONTENT_TYPE
     )
   ) {
     throw new Error('Existing publication manifest is invalid');
   }
 
+  const manifest = candidate as unknown as PublicationManifest;
   const prefix = normalizeDocsPrefix(docsPrefix);
   const seenPaths = new Set<string>();
   const seenKeys = new Set<string>();
-  for (const document of candidate.documents) {
+  for (const document of manifest.documents) {
     let normalizedPath: string;
     try {
       normalizedPath = normalizeDocumentPath(document.path);
@@ -207,7 +214,7 @@ function validateManifest(value: unknown, docsPrefix: string): PublicationManife
     seenPaths.add(document.path);
     seenKeys.add(document.key);
   }
-  return candidate as PublicationManifest;
+  return manifest;
 }
 
 export async function readPublicationState(
@@ -263,15 +270,17 @@ async function acquirePublicationLock(
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const expiresAt = now() + PUBLICATION_LOCK_TTL_MS;
     try {
-      const response = (await s3.send(new PutObjectCommand({
-        Bucket: bucketName,
-        Key: key,
-        Body: `${JSON.stringify({ owner, expiresAt, phase: 'acquired' })}\n`,
-        ContentType: 'application/json; charset=utf-8',
-        CacheControl: 'no-store',
-        IfNoneMatch: '*',
-        Metadata: { owner }
-      }))) as { ETag?: string };
+      const response = (await s3.send(
+        new PutObjectCommand({
+          Bucket: bucketName,
+          Key: key,
+          Body: `${JSON.stringify({ owner, expiresAt, phase: 'acquired' })}\n`,
+          ContentType: 'application/json; charset=utf-8',
+          CacheControl: 'no-store',
+          IfNoneMatch: '*',
+          Metadata: { owner }
+        })
+      )) as { ETag?: string };
       if (response.ETag === undefined || response.ETag === '') {
         throw new Error('S3 publication lock response did not contain an ETag');
       }
@@ -282,10 +291,12 @@ async function acquirePublicationLock(
       }
     }
 
-    const response = (await s3.send(new GetObjectCommand({
-      Bucket: bucketName,
-      Key: key
-    }))) as { Body?: unknown; ETag?: string };
+    const response = (await s3.send(
+      new GetObjectCommand({
+        Bucket: bucketName,
+        Key: key
+      })
+    )) as { Body?: unknown; ETag?: string };
     const lockBody = JSON.parse(await bodyToString(response.Body)) as {
       owner?: unknown;
       expiresAt?: unknown;
@@ -305,15 +316,15 @@ async function acquirePublicationLock(
       throw new Error(`Another publication is in progress (owner ${lockBody.owner})`);
     }
     if (lockBody.phase === 'publishing') {
-      throw new Error(
-        `Expired publishing lock requires manual recovery (owner ${lockBody.owner})`
-      );
+      throw new Error(`Expired publishing lock requires manual recovery (owner ${lockBody.owner})`);
     }
-    await s3.send(new DeleteObjectCommand({
-      Bucket: bucketName,
-      Key: key,
-      IfMatch: response.ETag
-    }));
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+        IfMatch: response.ETag
+      })
+    );
   }
 
   throw new Error('Unable to acquire the S3 publication lock');
@@ -326,19 +337,21 @@ async function markPublicationLockPublishing(
   owner: string,
   now: () => number
 ): Promise<PublicationLock> {
-  const response = (await s3.send(new PutObjectCommand({
-    Bucket: bucketName,
-    Key: lock.key,
-    Body: `${JSON.stringify({
-      owner,
-      expiresAt: now() + PUBLICATION_LOCK_TTL_MS,
-      phase: 'publishing'
-    })}\n`,
-    ContentType: 'application/json; charset=utf-8',
-    CacheControl: 'no-store',
-    IfMatch: lock.eTag,
-    Metadata: { owner, phase: 'publishing' }
-  }))) as { ETag?: string };
+  const response = (await s3.send(
+    new PutObjectCommand({
+      Bucket: bucketName,
+      Key: lock.key,
+      Body: `${JSON.stringify({
+        owner,
+        expiresAt: now() + PUBLICATION_LOCK_TTL_MS,
+        phase: 'publishing'
+      })}\n`,
+      ContentType: 'application/json; charset=utf-8',
+      CacheControl: 'no-store',
+      IfMatch: lock.eTag,
+      Metadata: { owner, phase: 'publishing' }
+    })
+  )) as { ETag?: string };
   if (response.ETag === undefined || response.ETag === '') {
     throw new Error('S3 publication lock transition did not contain an ETag');
   }
@@ -350,11 +363,13 @@ async function releasePublicationLock(
   bucketName: string,
   lock: PublicationLock
 ): Promise<void> {
-  await s3.send(new DeleteObjectCommand({
-    Bucket: bucketName,
-    Key: lock.key,
-    IfMatch: lock.eTag
-  }));
+  await s3.send(
+    new DeleteObjectCommand({
+      Bucket: bucketName,
+      Key: lock.key,
+      IfMatch: lock.eTag
+    })
+  );
 }
 
 async function withPublicationLock<T>(
@@ -449,32 +464,36 @@ async function deleteKeys(
   concurrency: number
 ): Promise<void> {
   const batches = chunks([...new Set(keys)].sort(), DELETE_BATCH_SIZE);
-  await mapWithConcurrency(batches, concurrency, async (batch) => {
+  await mapWithConcurrency(batches, concurrency, async batch => {
     const response = (await s3.send(
       new DeleteObjectsCommand({
         Bucket: bucketName,
         Delete: {
           Quiet: true,
-          Objects: batch.map((Key) => ({ Key }))
+          Objects: batch.map(Key => ({ Key }))
         }
       })
     )) as { Errors?: Array<{ Key?: string; Code?: string; Message?: string }> };
     if ((response.Errors?.length ?? 0) > 0) {
-      const details = response.Errors?.map(
-        (error) => `${error.Key ?? 'unknown'}: ${error.Code ?? error.Message ?? 'delete failed'}`
-      ).join(', ');
+      const details =
+        response.Errors?.map(
+          error => `${error.Key ?? 'unknown'}: ${error.Code ?? error.Message ?? 'delete failed'}`
+        ).join(', ') ?? 'unknown deletion error';
       throw new Error(`S3 failed to delete objects: ${details}`);
     }
   });
 }
 
-function createManifest(files: readonly MarkdownFile[], options: PublishOptions): PublicationManifest {
+function createManifest(
+  files: readonly MarkdownFile[],
+  options: PublishOptions
+): PublicationManifest {
   const sortedFiles = [...files].sort((left, right) =>
     left.relativePath < right.relativePath ? -1 : left.relativePath > right.relativePath ? 1 : 0
   );
   const prefix = normalizeDocsPrefix(options.prefix);
   const seenPaths = new Set<string>();
-  const documents = sortedFiles.map((file) => {
+  const documents = sortedFiles.map(file => {
     const path = normalizeDocumentPath(file.relativePath);
     if (!path.endsWith('.md')) {
       throw new Error(`Document path must end in .md: ${path}`);
@@ -514,7 +533,7 @@ export async function publishToS3(
   const manifest = createManifest(files, options);
   const nextManifestBody = serializeManifest(manifest);
   const existing = Object.prototype.hasOwnProperty.call(dependencies, 'existingState')
-    ? dependencies.existingState ?? undefined
+    ? (dependencies.existingState ?? undefined)
     : await readPublicationState(s3, options.bucketName, prefix);
 
   if (
@@ -530,7 +549,7 @@ export async function publishToS3(
     throw new Error('Stage ID contains unsafe characters');
   }
   const stagePrefix = publicationStagingPrefix(prefix, stageId);
-  const stageKeys = manifest.documents.map((document) => `${stagePrefix}${document.path}`);
+  const stageKeys = manifest.documents.map(document => `${stagePrefix}${document.path}`);
   let stageCleaned = false;
 
   const cleanupStage = async (): Promise<void> => {
@@ -579,7 +598,7 @@ export async function publishToS3(
         }
       },
       async () => {
-        await mapWithConcurrency(manifest.documents, options.concurrency, async (document) => {
+        await mapWithConcurrency(manifest.documents, options.concurrency, async document => {
           await s3.send(
             new CopyObjectCommand({
               Bucket: options.bucketName,
@@ -591,9 +610,9 @@ export async function publishToS3(
           );
         });
 
-        const desiredKeys = new Set(manifest.documents.map((document) => document.key));
+        const desiredKeys = new Set(manifest.documents.map(document => document.key));
         const staleKeys = (await listKeys(s3, options.bucketName, prefix)).filter(
-          (key) => isLiveDocumentKey(key, prefix) && !desiredKeys.has(key)
+          key => isLiveDocumentKey(key, prefix) && !desiredKeys.has(key)
         );
         await deleteKeys(s3, options.bucketName, staleKeys, options.concurrency);
         await cleanupStage();

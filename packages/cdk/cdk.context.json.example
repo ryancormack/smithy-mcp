@@ -1,23 +1,23 @@
 {
   "staging": {
-    "account": "111111111111",
-    "region": "us-east-1",
-    "domain": "staging.example.com",
-    "hostedZoneId": "Z0123456789EXAMPLE",
-    "hostedZoneName": "example.com",
+    "account": "000000000000",
+    "region": "us-west-2",
+    "domain": "staging.mcp.example.invalid",
+    "hostedZoneId": "Z000000000000000000000",
+    "hostedZoneName": "example.invalid",
     "budgetLimitUsd": 25,
-    "budgetNotificationEmail": "cloud-alerts@example.com",
+    "budgetNotificationEmail": "cloud-alerts@example.invalid",
     "mcpReservedConcurrency": 10,
     "wafRateLimit": 500
   },
   "production": {
-    "account": "222222222222",
+    "account": "000000000001",
     "region": "us-west-2",
-    "domain": "mcp.example.com",
-    "hostedZoneId": "Z9876543210EXAMPLE",
-    "hostedZoneName": "example.com",
+    "domain": "mcp.example.invalid",
+    "hostedZoneId": "Z111111111111111111111",
+    "hostedZoneName": "example.invalid",
     "budgetLimitUsd": 100,
-    "budgetNotificationEmail": "cloud-alerts@example.com",
+    "budgetNotificationEmail": "cloud-alerts@example.invalid",
     "mcpReservedConcurrency": 50,
     "wafRateLimit": 2000
   }

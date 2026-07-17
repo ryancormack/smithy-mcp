@@ -15,6 +15,7 @@ export interface StartAndWaitOptions {
   knowledgeBaseId: string;
   dataSourceId: string;
   clientToken: string;
+  ingestionJobId?: string;
   pollIntervalMs: number;
   maximumPollIntervalMs: number;
   timeoutMs: number;
@@ -24,6 +25,7 @@ export interface StartAndWaitDependencies {
   bedrock?: BedrockSender;
   sleep?: (milliseconds: number) => Promise<void>;
   now?: () => number;
+  onIngestionJobStarted?: (ingestionJobId: string) => Promise<void>;
 }
 
 export interface CompletedIngestionJob {
@@ -31,8 +33,15 @@ export interface CompletedIngestionJob {
   status: 'COMPLETE';
 }
 
+export class BedrockIngestionTerminalError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BedrockIngestionTerminalError';
+  }
+}
+
 function defaultSleep(milliseconds: number): Promise<void> {
-  return new Promise((resolve) => {
+  return new Promise(resolve => {
     setTimeout(resolve, milliseconds);
   });
 }
@@ -57,13 +66,15 @@ async function sendWithDeadline(
     }, remaining);
 
     bedrock.send(command, { abortSignal: controller.signal }).then(
-      (result) => {
+      result => {
         clearTimeout(timer);
         resolve(result);
       },
       (error: unknown) => {
         clearTimeout(timer);
-        reject(error);
+        reject(
+          error instanceof Error ? error : new Error('Bedrock request failed', { cause: error })
+        );
       }
     );
   });
@@ -92,20 +103,27 @@ export async function startIngestionAndWait(
   const deadline = now() + options.timeoutMs;
   const timeoutMessage = `Bedrock ingestion timed out after ${options.timeoutMs}ms`;
 
-  const startResponse = (await sendWithDeadline(
-    bedrock,
-    new StartIngestionJobCommand({
-      knowledgeBaseId: options.knowledgeBaseId,
-      dataSourceId: options.dataSourceId,
-      clientToken: options.clientToken
-    }),
-    deadline,
-    now,
-    timeoutMessage
-  )) as { ingestionJob?: { ingestionJobId?: string } };
-  const ingestionJobId = startResponse.ingestionJob?.ingestionJobId;
-  if (ingestionJobId === undefined || ingestionJobId === '') {
-    throw new Error('Bedrock did not return an ingestion job ID');
+  let ingestionJobId = options.ingestionJobId;
+  if (ingestionJobId === undefined) {
+    const startResponse = (await sendWithDeadline(
+      bedrock,
+      new StartIngestionJobCommand({
+        knowledgeBaseId: options.knowledgeBaseId,
+        dataSourceId: options.dataSourceId,
+        clientToken: options.clientToken
+      }),
+      deadline,
+      now,
+      timeoutMessage
+    )) as { ingestionJob?: { ingestionJobId?: string } };
+    ingestionJobId = startResponse.ingestionJob?.ingestionJobId;
+    if (ingestionJobId === undefined || ingestionJobId === '') {
+      throw new Error('Bedrock did not return an ingestion job ID');
+    }
+    await dependencies.onIngestionJobStarted?.(ingestionJobId);
+  }
+  if (ingestionJobId === '') {
+    throw new Error('Bedrock ingestion job ID cannot be empty');
   }
   const jobTimeoutMessage = `Bedrock ingestion job ${ingestionJobId} timed out after ${options.timeoutMs}ms`;
   let pollDelay = options.pollIntervalMs;
@@ -134,12 +152,14 @@ export async function startIngestionAndWait(
     }
     if (status !== undefined && FAILURE_STATUSES.has(status)) {
       const reasons = response.ingestionJob?.failureReasons?.join('; ');
-      throw new Error(
+      throw new BedrockIngestionTerminalError(
         `Bedrock ingestion job ${ingestionJobId} ended with ${status}${reasons === undefined || reasons === '' ? '' : `: ${reasons}`}`
       );
     }
     if (status === undefined || !IN_PROGRESS_STATUSES.has(status)) {
-      throw new Error(`Bedrock ingestion job ${ingestionJobId} returned unknown status: ${status ?? 'undefined'}`);
+      throw new Error(
+        `Bedrock ingestion job ${ingestionJobId} returned unknown status: ${status ?? 'undefined'}`
+      );
     }
 
     const remaining = deadline - now();

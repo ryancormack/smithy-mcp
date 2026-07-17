@@ -89,15 +89,23 @@ export async function runCommand(
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
       outputBytes += buffer.byteLength;
       if (outputBytes > options.maxOutputBytes) {
-        failAndKill(new Error(`${command} exceeded the ${options.maxOutputBytes}-byte output limit`));
+        failAndKill(
+          new Error(`${command} exceeded the ${options.maxOutputBytes}-byte output limit`)
+        );
         return;
       }
       target.push(buffer);
     };
 
-    child.stdout?.on('data', (chunk: Buffer | string) => collect(stdoutChunks, chunk));
-    child.stderr?.on('data', (chunk: Buffer | string) => collect(stderrChunks, chunk));
-    child.once('error', (error) => finish(terminationError ?? error));
+    child.stdout.on('data', (chunk: Buffer | string) => {
+      collect(stdoutChunks, chunk);
+    });
+    child.stderr.on('data', (chunk: Buffer | string) => {
+      collect(stderrChunks, chunk);
+    });
+    child.once('error', error => {
+      finish(terminationError ?? error);
+    });
     child.once('close', (code, signal) => {
       if (terminationError !== undefined) {
         finish(terminationError);
@@ -107,7 +115,9 @@ export async function runCommand(
       const stderr = Buffer.concat(stderrChunks).toString('utf8');
       if (code !== 0) {
         const status = signal === null ? `exit code ${code ?? 'unknown'}` : `signal ${signal}`;
-        finish(new Error(`${command} failed with ${status}${stderr === '' ? '' : `: ${stderr.trim()}`}`));
+        finish(
+          new Error(`${command} failed with ${status}${stderr === '' ? '' : `: ${stderr.trim()}`}`)
+        );
         return;
       }
       finish(undefined, { stdout, stderr });

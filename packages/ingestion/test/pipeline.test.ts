@@ -1,7 +1,15 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import type { IngestionConfig } from '../src/config.js';
 import { runIngestion } from '../src/pipeline.js';
 import { publicationStatePrefix } from '../src/s3-keys.js';
+import {
+  completedSyncStateKey,
+  pendingSyncStateKey,
+  type BedrockSyncIdentity,
+  type BedrockSyncState
+} from '../src/sync-state.js';
+import { serializeManifest, type S3Sender } from '../src/upload-s3.js';
 
 const commitSha = 'a'.repeat(40);
 const config: IngestionConfig = {
@@ -23,7 +31,6 @@ const config: IngestionConfig = {
 
 const statePrefix = publicationStatePrefix(config.docsPrefix);
 const manifestKey = `${statePrefix}manifest.json`;
-const syncStateKey = `${statePrefix}_sync-state.json`;
 
 const manifest = {
   version: 1 as const,
@@ -41,103 +48,211 @@ const manifest = {
   ]
 };
 
-describe('ingestion pipeline', () => {
-  it('skips conversion, publication, and Bedrock when the resolved SHA is unchanged', async () => {
-    const execute = vi.fn(async (_command: string, args: readonly string[]) => ({
+const identity: BedrockSyncIdentity = {
+  publicationId: createHash('sha256').update(serializeManifest(manifest), 'utf8').digest('hex'),
+  upstreamSha: commitSha,
+  sourceRepository: config.sourceRepository,
+  knowledgeBaseId: 'KB12345678',
+  dataSourceId: 'DS12345678'
+};
+
+function preconditionFailed(): Error {
+  return Object.assign(new Error('precondition failed'), {
+    name: 'PreconditionFailed',
+    $metadata: { httpStatusCode: 412 }
+  });
+}
+
+class MemoryS3 implements S3Sender {
+  readonly objects = new Map<string, { body: string; eTag: string }>();
+  readonly calls: Array<{ name: string; input: Record<string, unknown> }> = [];
+  failPut?: (key: string, input: Record<string, unknown>) => Error | undefined;
+  private revision = 0;
+
+  constructor() {
+    this.putDirect(manifestKey, serializeManifest(manifest));
+  }
+
+  putDirect(key: string, body: string): void {
+    this.revision += 1;
+    this.objects.set(key, { body, eTag: `"etag-${this.revision}"` });
+  }
+
+  async send(command: unknown): Promise<unknown> {
+    const value = command as { constructor: { name: string }; input: Record<string, unknown> };
+    const name = value.constructor.name;
+    const input = value.input;
+    const key = String(input.Key ?? '');
+    this.calls.push({ name, input });
+
+    if (name === 'GetObjectCommand') {
+      const object = this.objects.get(key);
+      if (object === undefined) {
+        throw Object.assign(new Error('missing'), { name: 'NoSuchKey' });
+      }
+      return { Body: object.body, ETag: object.eTag };
+    }
+    if (name === 'PutObjectCommand') {
+      const failure = this.failPut?.(key, input);
+      if (failure !== undefined) {
+        throw failure;
+      }
+      const existing = this.objects.get(key);
+      if (input.IfNoneMatch === '*' && existing !== undefined) {
+        throw preconditionFailed();
+      }
+      if (typeof input.IfMatch === 'string' && existing?.eTag !== input.IfMatch) {
+        throw preconditionFailed();
+      }
+      this.putDirect(key, String(input.Body));
+      return { ETag: this.objects.get(key)?.eTag };
+    }
+    if (name === 'DeleteObjectCommand') {
+      const existing = this.objects.get(key);
+      if (typeof input.IfMatch === 'string' && existing?.eTag !== input.IfMatch) {
+        throw preconditionFailed();
+      }
+      this.objects.delete(key);
+      return {};
+    }
+    throw new Error(`Unexpected S3 command: ${name}`);
+  }
+}
+
+function cloneDependencies() {
+  return {
+    makeTemporaryDirectory: vi.fn(async () => '/tmp/smithy-docs-test'),
+    removeDirectory: vi.fn(async () => undefined),
+    execute: vi.fn(async (_command: string, args: readonly string[]) => ({
       stdout: args.includes('rev-parse') ? `${commitSha}\n` : '',
       stderr: ''
-    }));
+    }))
+  };
+}
+
+function fixedIds() {
+  return {
+    createSyncOwnerId: () => 'owner-1',
+    createClientToken: () => 'c'.repeat(64)
+  };
+}
+
+function completedState(jobId = 'JOB123'): BedrockSyncState {
+  return {
+    version: 1,
+    ...identity,
+    clientToken: 'd'.repeat(64),
+    ingestionJobId: jobId
+  };
+}
+
+describe('ingestion pipeline synchronization recovery', () => {
+  it('skips conversion and Bedrock when the unchanged publication has a completion witness', async () => {
+    const s3 = new MemoryS3();
+    s3.putDirect(
+      completedSyncStateKey(config.docsPrefix, identity),
+      JSON.stringify(completedState())
+    );
     const bedrockSend = vi.fn(async () => {
       throw new Error('Bedrock must not be called');
     });
     const convertExecute = vi.fn(async () => {
       throw new Error('Pandoc must not be called');
     });
-    const removeDirectory = vi.fn(async () => undefined);
-    const s3Send = vi.fn(async (command: unknown) => {
-      const value = command as { constructor: { name: string }; input: { Key?: string } };
-      const name = value.constructor.name;
-      if (name !== 'GetObjectCommand') {
-        throw new Error(`Unexpected S3 command: ${name}`);
-      }
-      if (value.input.Key === manifestKey) {
-        return { Body: JSON.stringify(manifest), ETag: '"manifest-etag"' };
-      }
-      if (value.input.Key === syncStateKey) {
-        return {
-          Body: JSON.stringify({
-            version: 1,
-            upstreamSha: commitSha,
-            knowledgeBaseId: config.knowledgeBaseId,
-            dataSourceId: config.dataSourceId,
-            ingestionJobId: 'JOB123'
-          })
-        };
-      }
-      throw new Error(`Unexpected S3 key: ${value.input.Key}`);
-    });
 
     const result = await runIngestion(config, {
-      clone: {
-        makeTemporaryDirectory: vi.fn(async () => '/tmp/smithy-docs-test'),
-        removeDirectory,
-        execute
-      },
+      clone: cloneDependencies(),
       convert: { execute: convertExecute },
-      s3: { send: s3Send },
+      s3,
       bedrock: { send: bedrockSend },
-      logger: { info: vi.fn() }
+      logger: { info: vi.fn() },
+      ...fixedIds()
     });
 
     expect(result).toEqual({ manifest, changed: false, ingestionJobId: 'JOB123' });
     expect(convertExecute).not.toHaveBeenCalled();
     expect(bedrockSend).not.toHaveBeenCalled();
-    expect(s3Send).toHaveBeenCalledTimes(2);
-    expect(removeDirectory).toHaveBeenCalledOnce();
   });
 
-  it('retries Bedrock for an unchanged publication that lacks a completed sync marker', async () => {
-    const execute = vi.fn(async (_command: string, args: readonly string[]) => ({
-      stdout: args.includes('rev-parse') ? `${commitSha}\n` : '',
-      stderr: ''
-    }));
-    const s3Calls: Array<{ name: string; key?: string }> = [];
-    const s3Send = vi.fn(async (command: unknown) => {
-      const value = command as { constructor: { name: string }; input: { Key?: string } };
-      const name = value.constructor.name;
-      s3Calls.push({ name, key: value.input.Key });
-      if (name === 'GetObjectCommand' && value.input.Key === manifestKey) {
-        return { Body: JSON.stringify(manifest), ETag: '"manifest-etag"' };
+  it('reuses the persisted client token after a start response is accepted but job-ID persistence fails', async () => {
+    const s3 = new MemoryS3();
+    let failJobIdWrite = true;
+    s3.failPut = (key, input) => {
+      if (key === pendingSyncStateKey(config.docsPrefix) && input.IfMatch && failJobIdWrite) {
+        failJobIdWrite = false;
+        return new Error('simulated response-loss crash');
       }
-      if (name === 'GetObjectCommand' && value.input.Key === syncStateKey) {
-        throw Object.assign(new Error('missing'), { name: 'NoSuchKey' });
+      return undefined;
+    };
+    const startTokens: string[] = [];
+    const bedrockSend = vi.fn(async (command: unknown) => {
+      const value = command as { constructor: { name: string }; input: Record<string, unknown> };
+      if (value.constructor.name === 'StartIngestionJobCommand') {
+        startTokens.push(String(value.input.clientToken));
+        return { ingestionJob: { ingestionJobId: 'JOB-ACCEPTED' } };
       }
-      if (name === 'PutObjectCommand' && value.input.Key === syncStateKey) {
-        return {};
-      }
-      throw new Error(`Unexpected S3 command: ${name} ${value.input.Key ?? ''}`);
+      return { ingestionJob: { status: 'COMPLETE' } };
     });
+    const dependencies = {
+      clone: cloneDependencies(),
+      s3,
+      bedrock: { send: bedrockSend },
+      logger: { info: vi.fn() },
+      ...fixedIds()
+    };
+
+    await expect(runIngestion(config, dependencies)).rejects.toThrow('response-loss crash');
+    const pendingAfterCrash = JSON.parse(
+      s3.objects.get(pendingSyncStateKey(config.docsPrefix))?.body ?? '{}'
+    ) as { clientToken?: string; ingestionJobId?: string };
+    expect(pendingAfterCrash).toMatchObject({ clientToken: 'c'.repeat(64) });
+    expect(pendingAfterCrash.ingestionJobId).toBeUndefined();
+
+    await expect(runIngestion(config, dependencies)).resolves.toMatchObject({
+      changed: false,
+      ingestionJobId: 'JOB-ACCEPTED'
+    });
+    expect(startTokens).toEqual(['c'.repeat(64), 'c'.repeat(64)]);
+    expect(s3.objects.has(pendingSyncStateKey(config.docsPrefix))).toBe(false);
+  });
+
+  it('polls the persisted job without starting another after a completed-marker write crash', async () => {
+    const s3 = new MemoryS3();
+    let failCompletedWrite = true;
+    s3.failPut = key => {
+      if (key.includes('/_sync-jobs/') && failCompletedWrite) {
+        failCompletedWrite = false;
+        return new Error('simulated completed-marker crash');
+      }
+      return undefined;
+    };
+    const commandNames: string[] = [];
     const bedrockSend = vi.fn(async (command: unknown) => {
       const name = (command as { constructor: { name: string } }).constructor.name;
+      commandNames.push(name);
       return name === 'StartIngestionJobCommand'
-        ? { ingestionJob: { ingestionJobId: 'JOB-RETRY' } }
+        ? { ingestionJob: { ingestionJobId: 'JOB-COMPLETE' } }
         : { ingestionJob: { status: 'COMPLETE' } };
     });
-
-    const result = await runIngestion(config, {
-      clone: {
-        makeTemporaryDirectory: vi.fn(async () => '/tmp/smithy-docs-test'),
-        removeDirectory: vi.fn(async () => undefined),
-        execute
-      },
-      s3: { send: s3Send },
+    const dependencies = {
+      clone: cloneDependencies(),
+      s3,
       bedrock: { send: bedrockSend },
-      logger: { info: vi.fn() }
-    });
+      logger: { info: vi.fn() },
+      ...fixedIds()
+    };
 
-    expect(result).toEqual({ manifest, changed: false, ingestionJobId: 'JOB-RETRY' });
-    expect(bedrockSend).toHaveBeenCalledTimes(2);
-    expect(s3Calls).toContainEqual({ name: 'PutObjectCommand', key: syncStateKey });
-    expect(syncStateKey.startsWith(config.docsPrefix)).toBe(false);
+    await expect(runIngestion(config, dependencies)).rejects.toThrow('completed-marker crash');
+    const pendingAfterCrash = JSON.parse(
+      s3.objects.get(pendingSyncStateKey(config.docsPrefix))?.body ?? '{}'
+    ) as { ingestionJobId?: string };
+    expect(pendingAfterCrash.ingestionJobId).toBe('JOB-COMPLETE');
+
+    commandNames.length = 0;
+    await expect(runIngestion(config, dependencies)).resolves.toMatchObject({
+      ingestionJobId: 'JOB-COMPLETE'
+    });
+    expect(commandNames).toEqual(['GetIngestionJobCommand']);
+    expect(s3.objects.has(pendingSyncStateKey(config.docsPrefix))).toBe(false);
   });
 });

@@ -36,14 +36,16 @@ async function findRstFiles(rootPath: string): Promise<string[]> {
 
   async function visit(directory: string): Promise<void> {
     const entries = await readdir(directory, { withFileTypes: true });
-    await Promise.all(entries.map(async (entry) => {
-      const path = resolve(directory, entry.name);
-      if (entry.isDirectory()) {
-        await visit(path);
-      } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.rst')) {
-        files.push(path);
-      }
-    }));
+    await Promise.all(
+      entries.map(async entry => {
+        const path = resolve(directory, entry.name);
+        if (entry.isDirectory()) {
+          await visit(path);
+        } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.rst')) {
+          files.push(path);
+        }
+      })
+    );
   }
 
   await visit(rootPath);
@@ -62,18 +64,26 @@ function outputFilePath(outputRoot: string, relativePath: string): string {
   const root = resolve(outputRoot);
   const output = resolve(root, relativePath);
   const fromRoot = relative(root, output);
-  if (fromRoot === '' || fromRoot === '..' || fromRoot.startsWith(`..${sep}`) || fromRoot.startsWith('/')) {
+  if (
+    fromRoot === '' ||
+    fromRoot === '..' ||
+    fromRoot.startsWith(`..${sep}`) ||
+    fromRoot.startsWith('/')
+  ) {
     throw new Error(`Generated path escapes the output directory: ${relativePath}`);
   }
   return output;
 }
 
 function normalizeMarkdown(markdown: string): string {
-  return `${markdown.replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').trimEnd()}\n`;
+  return `${markdown
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .trimEnd()}\n`;
 }
 
 function extractTitle(markdown: string, sourceRelativePath: string): string {
-  const heading = markdown.split('\n').find((line) => /^#{1,6}\s+\S/.test(line));
+  const heading = markdown.split('\n').find(line => /^#{1,6}\s+\S/.test(line));
   if (heading !== undefined) {
     return heading.replace(/^#{1,6}\s+/, '').trim();
   }
@@ -99,9 +109,10 @@ export async function convertRstToMarkdown(
 ): Promise<MarkdownFile[]> {
   const findFiles = dependencies.findFiles ?? findRstFiles;
   const makeDirectory = dependencies.makeDirectory ?? mkdir;
-  const readTextFile = dependencies.readTextFile ?? ((path) => readFile(path, 'utf8'));
-  const writeTextFile = dependencies.writeTextFile ?? ((path, content) => writeFile(path, content, 'utf8'));
-  const fileSize = dependencies.fileSize ?? (async (path) => (await stat(path)).size);
+  const readTextFile = dependencies.readTextFile ?? (path => readFile(path, 'utf8'));
+  const writeTextFile =
+    dependencies.writeTextFile ?? ((path, content) => writeFile(path, content, 'utf8'));
+  const fileSize = dependencies.fileSize ?? (async path => (await stat(path)).size);
   const execute = dependencies.execute ?? runCommand;
   const commandOptions = {
     timeoutMs: options.commandTimeoutMs,
@@ -116,7 +127,7 @@ export async function convertRstToMarkdown(
   await makeDirectory(options.outputPath, { recursive: true });
   const prefix = (options.docsPrefix ?? 'smithy-docs/').replace(/\/+$/, '');
 
-  return mapWithConcurrency(rstFiles, options.concurrency, async (rstFile) => {
+  return mapWithConcurrency(rstFiles, options.concurrency, async rstFile => {
     const sourceRelativePath = normalizeRelativePath(docsPath, rstFile);
     const relativePath = sourceRelativePath.replace(/\.rst$/i, '.md');
     const generatedPath = outputFilePath(options.outputPath, relativePath);
@@ -128,7 +139,9 @@ export async function convertRstToMarkdown(
     );
     const generatedBytes = await fileSize(generatedPath);
     if (generatedBytes > options.commandMaxOutputBytes) {
-      throw new Error(`Pandoc output exceeded the ${options.commandMaxOutputBytes}-byte limit: ${relativePath}`);
+      throw new Error(
+        `Pandoc output exceeded the ${options.commandMaxOutputBytes}-byte limit: ${relativePath}`
+      );
     }
     const markdown = normalizeMarkdown(await readTextFile(generatedPath));
     const title = extractTitle(markdown, sourceRelativePath);

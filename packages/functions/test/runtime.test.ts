@@ -11,7 +11,8 @@ import {
   MAX_TOOL_OUTPUT_BYTES,
   normalizeHost,
   normalizeOrigin,
-  relativeDocumentPath
+  relativeDocumentPath,
+  renderDocumentList
 } from '../src/mcp-server/runtime';
 
 describe('loadRuntimeConfig', () => {
@@ -48,18 +49,24 @@ describe('loadRuntimeConfig', () => {
   });
 
   it('rejects wildcard policies and invalid ports', () => {
-    expect(() => loadRuntimeConfig({
-      ...validEnvironment,
-      MCP_ALLOWED_HOSTS: '*'
-    })).toThrow('cannot contain wildcards');
-    expect(() => loadRuntimeConfig({
-      ...validEnvironment,
-      AWS_RESOURCE_REGION: 'not-a-region'
-    })).toThrow('AWS_RESOURCE_REGION must be a valid AWS region');
-    expect(() => loadRuntimeConfig({
-      ...validEnvironment,
-      PORT: '70000'
-    })).toThrow('PORT must be an integer');
+    expect(() =>
+      loadRuntimeConfig({
+        ...validEnvironment,
+        MCP_ALLOWED_HOSTS: '*'
+      })
+    ).toThrow('cannot contain wildcards');
+    expect(() =>
+      loadRuntimeConfig({
+        ...validEnvironment,
+        AWS_RESOURCE_REGION: 'not-a-region'
+      })
+    ).toThrow('AWS_RESOURCE_REGION must be a valid AWS region');
+    expect(() =>
+      loadRuntimeConfig({
+        ...validEnvironment,
+        PORT: '70000'
+      })
+    ).toThrow('PORT must be an integer');
   });
 });
 
@@ -76,19 +83,29 @@ describe('host and origin policy', () => {
 
   it('allows configured hosts with an absent or configured origin', () => {
     expect(isRequestAllowed({ host: 'MCP.EXAMPLE.COM' }, policy)).toBe(true);
-    expect(isRequestAllowed({
-      host: 'mcp.example.com',
-      origin: 'https://app.example.com/'
-    }, policy)).toBe(true);
+    expect(
+      isRequestAllowed(
+        {
+          host: 'mcp.example.com',
+          origin: 'https://app.example.com/'
+        },
+        policy
+      )
+    ).toBe(true);
   });
 
   it('rejects missing or unconfigured hosts and origins', () => {
     expect(isRequestAllowed({}, policy)).toBe(false);
     expect(isRequestAllowed({ host: 'attacker.example' }, policy)).toBe(false);
-    expect(isRequestAllowed({
-      host: 'mcp.example.com',
-      origin: 'https://attacker.example'
-    }, policy)).toBe(false);
+    expect(
+      isRequestAllowed(
+        {
+          host: 'mcp.example.com',
+          origin: 'https://attacker.example'
+        },
+        policy
+      )
+    ).toBe(false);
   });
 });
 
@@ -116,9 +133,7 @@ describe('canonicalizeDocumentKey', () => {
   });
 
   it('rejects keys that exceed the S3 key byte limit after prefixing', () => {
-    expect(() => canonicalizeDocumentKey('a'.repeat(1_020))).toThrow(
-      InvalidDocumentPathError
-    );
+    expect(() => canonicalizeDocumentKey('a'.repeat(1_020))).toThrow(InvalidDocumentPathError);
   });
 
   it('only removes the exact documentation prefix', () => {
@@ -159,10 +174,12 @@ describe('collectPaginatedKeys', () => {
   });
 
   it('rejects repeated continuation tokens', async () => {
-    await expect(collectPaginatedKeys(async () => ({
-      keys: [],
-      nextToken: 'same-token'
-    }))).rejects.toThrow('repeated continuation token');
+    await expect(
+      collectPaginatedKeys(async () => ({
+        keys: [],
+        nextToken: 'same-token'
+      }))
+    ).rejects.toThrow('repeated continuation token');
   });
 });
 
@@ -175,5 +192,35 @@ describe('boundUtf8Text', () => {
 
   it('does not alter output already within the cap', () => {
     expect(boundUtf8Text('short response', 256)).toBe('short response');
+  });
+});
+
+describe('renderDocumentList', () => {
+  it('sort-ready rendering reports only complete paths included within the UTF-8 bound', () => {
+    const files = Array.from(
+      { length: 20 },
+      (_, index) => `${String(index).padStart(2, '0')}-${'😀'.repeat(40)}.md`
+    );
+
+    const rendered = renderDocumentList(files, false, 512);
+    const match = rendered.match(/Included: (\d+) of (\d+) discovered files/);
+    expect(match).not.toBeNull();
+    const included = Number(match?.[1]);
+    expect(Number(match?.[2])).toBe(files.length);
+    expect(Buffer.byteLength(rendered, 'utf8')).toBeLessThanOrEqual(512);
+    expect(rendered).toContain('[Output truncated');
+    expect((rendered.match(/^- /gm) ?? []).length).toBe(included);
+    expect(rendered).not.toContain('\uFFFD');
+  });
+
+  it('keeps deterministic paths intact and distinguishes discovery capping', () => {
+    const files = ['a.md', `${'z'.repeat(1_000)}.md`];
+    const rendered = renderDocumentList(files, true, 512);
+
+    expect(rendered).toContain('Included: 1 of 2 discovered files');
+    expect(rendered).toContain('- a.md\n');
+    expect(rendered).not.toContain(`- ${files[1]}`);
+    expect(rendered).toContain('additional files may exist');
+    expect(rendered).toContain('[Output truncated');
   });
 });
