@@ -1,0 +1,75 @@
+{
+  "languages": {
+    "typescript": {
+      "name": "typescript-language-server",
+      "command": "typescript-language-server",
+      "args": ["--stdio"],
+      "file_extensions": ["ts", "js", "tsx", "jsx"],
+      "project_patterns": ["package.json", "tsconfig.json"],
+      "exclude_patterns": ["**/node_modules/**", "**/dist/**"],
+      "multi_workspace": false,
+      "initialization_options": {
+        "preferences": { "disableSuggestions": false }
+      },
+      "request_timeout_secs": 60
+    },
+    "python": {
+      "name": "pyright",
+      "command": "pyright-langserver",
+      "args": ["--stdio"],
+      "file_extensions": ["py"],
+      "project_patterns": [
+        "pyproject.toml",
+        "setup.py",
+        "requirements.txt",
+        "pyrightconfig.json"
+      ],
+      "exclude_patterns": [
+        "**/__pycache__/**",
+        "**/venv/**",
+        "**/.venv/**",
+        "**/.pytest_cache/**"
+      ],
+      "multi_workspace": false,
+      "initialization_options": {},
+      "request_timeout_secs": 60
+    },
+    "kotlin": {
+      "name": "kotlin-language-server",
+      "command": "kotlin-language-server",
+      "args": [],
+      "file_extensions": ["kt", "kts"],
+      "project_patterns": [
+        "build.gradle.kts",
+        "build.gradle",
+        "settings.gradle.kts",
+        "settings.gradle",
+        "pom.xml"
+      ],
+      "exclude_patterns": ["**/build/**", "**/.gradle/**"],
+      "multi_workspace": false,
+      "initialization_options": {},
+      "request_timeout_secs": 60
+    },
+    "swift": {
+      "name": "sourcekit-lsp",
+      "command": "xcrun",
+      "args": ["sourcekit-lsp"],
+      "file_extensions": ["swift"],
+      "project_patterns": ["Package.swift", "*.xcodeproj", "*.xcworkspace"],
+      "exclude_patterns": [".build/**", "DerivedData/**"],
+      "multi_workspace": false
+    },
+    "smithy": {
+      "name": "smithy-language-server",
+      "command": "smithy-language-server",
+      "args": [],
+      "file_extensions": ["smithy"],
+      "project_patterns": ["smithy-build.json", ".smithy-project.json"],
+      "exclude_patterns": ["**/build/**"],
+      "multi_workspace": false,
+      "initialization_options": {},
+      "request_timeout_secs": 60
+    }
+  }
+}

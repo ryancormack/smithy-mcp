@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "conventional commit guard",
+      "trigger": "PreToolUse",
+      "description": "Before running a shell command, if it is a `git commit` with a message (-m/--message or a heredoc-style commit), check the message against the Conventional Commits format (type(scope)?: description). Non-conforming messages are blocked (exit 2) so the agent retries with a valid message. Commits without an inline message (e.g. opening $EDITOR) pass through, since the message can't be inspected yet. Fail-open.",
+      "matcher": "execute_bash",
+      "action": {
+        "type": "command",
+        "command": "bash .kiro/hooks/scripts/conventional-commit-guard.sh",
+        "timeout": 30
+      },
+      "enabled": true
+    }
+  ]
+}

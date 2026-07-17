@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "npm latest version guard",
+      "trigger": "PreToolUse",
+      "description": "Before running a shell command, if it is an unpinned npm install/i/add, look up the latest published version(s) via npm view and block (exit 2) so the agent re-runs with exact version pins. Pinned installs pass through. Fail-open.",
+      "matcher": "execute_bash",
+      "action": {
+        "type": "command",
+        "command": "bash .kiro/hooks/scripts/npm-latest-version.sh",
+        "timeout": 30
+      },
+      "enabled": true
+    }
+  ]
+}
