@@ -20,7 +20,7 @@ RUN pnpm --filter @smithy-mcp/cdk exec esbuild \
       --banner:js="import { createRequire } from 'module';const require = createRequire(import.meta.url);" \
       --outfile=/asset/index.mjs
 
-FROM public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 AS adapter
+FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0 AS adapter
 FROM public.ecr.aws/docker/library/node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
