@@ -58,11 +58,11 @@ importers:
   packages/functions:
     dependencies:
       '@aws-sdk/client-bedrock-agent-runtime':
-        specifier: ^3.1089.0
-        version: 3.1089.0
+        specifier: ^3.1090.0
+        version: 3.1090.0
       '@aws-sdk/client-s3':
-        specifier: ^3.1089.0
-        version: 3.1089.0
+        specifier: ^3.1090.0
+        version: 3.1090.0
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)
@@ -92,11 +92,11 @@ importers:
   packages/ingestion:
     dependencies:
       '@aws-sdk/client-bedrock-agent':
-        specifier: ^3.1089.0
-        version: 3.1089.0
+        specifier: ^3.1090.0
+        version: 3.1090.0
       '@aws-sdk/client-s3':
-        specifier: ^3.1089.0
-        version: 3.1089.0
+        specifier: ^3.1090.0
+        version: 3.1090.0
     devDependencies:
       '@types/node':
         specifier: ^22.20.1
@@ -130,16 +130,16 @@ packages:
     resolution: {integrity: sha512-IImkbEyXdV6/uaF5r6Wkk+8718mQw1ll83j0a4a30R3JM/rHVFdWAiT4jtJpFjJiIwM/oJ6SxIxr0z2TaQUGqw==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-bedrock-agent-runtime@3.1089.0':
-    resolution: {integrity: sha512-d/pAEJ2XVP60ngrBzT4iQRmB7ds+FZJj1h47U4V3jrGDr224gz22kh94xkjkqcT94WMjhqXSsXOD/5shTQriaA==}
+  '@aws-sdk/client-bedrock-agent-runtime@3.1090.0':
+    resolution: {integrity: sha512-Rr1+ezVE/Oifm4ecgo2rUeyA33lDNAA5PJkVnUJSP/hZYYbhoq/VM7A2BudRGMzBV6zo2xiKFKkr0MLXHpsOkA==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-bedrock-agent@3.1089.0':
-    resolution: {integrity: sha512-ZfLDSaRW6cUiy5SYm7s8VASgMefMIf/CSVuzm8KKGme/9kxdh6Icn8QVjo5Xo2OLjVOiABVe69+NmL4Xqk+hqQ==}
+  '@aws-sdk/client-bedrock-agent@3.1090.0':
+    resolution: {integrity: sha512-OaNzkKPxYD55Ms+ICPXL5ELShmc8wOQBKZgKIghs0HvAx1xLZYt/1Nn74O+mIWADHrgPvtcRGuXe8hnykZnTTw==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/client-s3@3.1089.0':
-    resolution: {integrity: sha512-Sc+JOtNeP+v+XdP9Rb4Hh+uhiNO2hh/CZQbKYooNakhOIgK6/K0cjoDCEGeFmkG0vf2DopTmSctzKlcKwy1BPw==}
+  '@aws-sdk/client-s3@3.1090.0':
+    resolution: {integrity: sha512-R6GX9cd1jljwzZ8xFmgAI/hHCuX1MobIKBdsymv7WL9SENvO9Vgz9KOR6avTnu0Ao+w1LmxnTe+jqmZXEn7Q/Q==}
     engines: {node: '>=20.0.0'}
 
   '@aws-sdk/core@3.975.3':
@@ -1831,7 +1831,7 @@ snapshots:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/client-bedrock-agent-runtime@3.1089.0':
+  '@aws-sdk/client-bedrock-agent-runtime@3.1090.0':
     dependencies:
       '@aws-sdk/core': 3.975.3
       '@aws-sdk/credential-provider-node': 3.972.70
@@ -1842,7 +1842,7 @@ snapshots:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/client-bedrock-agent@3.1089.0':
+  '@aws-sdk/client-bedrock-agent@3.1090.0':
     dependencies:
       '@aws-sdk/core': 3.975.3
       '@aws-sdk/credential-provider-node': 3.972.70
@@ -1853,7 +1853,7 @@ snapshots:
       '@smithy/types': 4.16.1
       tslib: 2.8.1
 
-  '@aws-sdk/client-s3@3.1089.0':
+  '@aws-sdk/client-s3@3.1090.0':
     dependencies:
       '@aws-sdk/checksums': 3.1000.18
       '@aws-sdk/core': 3.975.3
