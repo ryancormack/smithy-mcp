@@ -1,0 +1,12 @@
+**/node_modules/
+**/dist/
+**/coverage/
+**/cdk.out/
+.pnpm-store/
+semantic-review/
+pnpm-lock.yaml
+.spec/
+.vscode/
+README.md
+draft.md
+architecture.*

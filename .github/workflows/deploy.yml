@@ -1,0 +1,237 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      production_confirmation:
+        description: Type deploy-production to deploy main to production
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.event_name == 'workflow_run' && 'staging' || 'production' }}
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '10.28.1'
+  AWS_EC2_METADATA_DISABLED: 'true'
+  CDK_DISABLE_VERSION_CHECK: 'true'
+
+jobs:
+  quality-gates:
+    name: Pre-deployment quality gates
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    outputs:
+      environment: ${{ steps.target.outputs.environment }}
+      revision: ${{ steps.target.outputs.revision }}
+    steps:
+      - name: Select and validate deployment target
+        id: target
+        env:
+          PRODUCTION_CONFIRMATION: ${{ inputs.production_confirmation }}
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == 'workflow_run' ]]; then
+            environment=staging
+            revision="$WORKFLOW_RUN_SHA"
+          else
+            [[ "${{ github.ref }}" == 'refs/heads/main' ]] || {
+              echo 'Manual production deployments must run from the main branch.' >&2
+              exit 1
+            }
+            [[ "$PRODUCTION_CONFIRMATION" == 'deploy-production' ]] || {
+              echo 'Production confirmation must exactly match deploy-production.' >&2
+              exit 1
+            }
+            environment=production
+            revision="${{ github.sha }}"
+          fi
+          [[ "$revision" =~ ^[0-9a-f]{40}$ ]] || {
+            echo 'Deployment revision is invalid.' >&2
+            exit 1
+          }
+          echo "environment=$environment" >> "$GITHUB_OUTPUT"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact validated revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ steps.target.outputs.revision }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pinned pnpm with Corepack
+        run: |
+          corepack enable
+          corepack prepare "pnpm@${PNPM_VERSION}" --activate
+          test "$(pnpm --version)" = "$PNPM_VERSION"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level high
+
+      - name: Check formatting and lint
+        run: pnpm quality
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  deploy:
+    name: Deploy ${{ needs.quality-gates.outputs.environment }}
+    needs: quality-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment:
+      name: ${{ needs.quality-gates.outputs.environment }}
+      url: ${{ vars.MCP_SMOKE_URL }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      DEPLOY_ENV: ${{ needs.quality-gates.outputs.environment }}
+      DEPLOY_REVISION: ${{ needs.quality-gates.outputs.revision }}
+      AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN || secrets.AWS_DEPLOY_ROLE_ARN }}
+      CDK_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+      CDK_WORKLOAD_REGION: ${{ vars.AWS_WORKLOAD_REGION }}
+      CDK_DOMAIN: ${{ vars.DOMAIN_NAME }}
+      CDK_HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
+      CDK_HOSTED_ZONE_NAME: ${{ vars.HOSTED_ZONE_NAME }}
+      CDK_BUDGET_LIMIT_USD: ${{ vars.BUDGET_LIMIT_USD }}
+      CDK_BUDGET_NOTIFICATION_EMAIL: ${{ vars.BUDGET_NOTIFICATION_EMAIL }}
+      CDK_MCP_RESERVED_CONCURRENCY: ${{ vars.MCP_RESERVED_CONCURRENCY }}
+      CDK_WAF_RATE_LIMIT: ${{ vars.WAF_RATE_LIMIT }}
+      MCP_SMOKE_URL: ${{ vars.MCP_SMOKE_URL }}
+      MCP_SMOKE_BEARER_TOKEN: ${{ secrets.MCP_SMOKE_BEARER_TOKEN }}
+      MCP_SMOKE_REQUIRE_CONTENT: 'true'
+    steps:
+      - name: Check out exact validated revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ env.DEPLOY_REVISION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable pinned pnpm with Corepack
+        run: |
+          corepack enable
+          corepack prepare "pnpm@${PNPM_VERSION}" --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate environment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          missing=()
+          for variable in AWS_DEPLOY_ROLE_ARN CDK_ACCOUNT CDK_WORKLOAD_REGION CDK_DOMAIN CDK_HOSTED_ZONE_ID CDK_HOSTED_ZONE_NAME MCP_SMOKE_URL; do
+            [[ -n "${!variable:-}" ]] || missing+=("$variable")
+          done
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing GitHub Environment configuration: %s\n' "${missing[*]}" >&2
+            exit 1
+          fi
+          [[ "$AWS_DEPLOY_ROLE_ARN" =~ ^arn:aws(-[a-z]+)?:iam::${CDK_ACCOUNT}:role/[A-Za-z0-9+=,.@_/-]+$ ]] || {
+            echo 'AWS_DEPLOY_ROLE_ARN must be an IAM role ARN in AWS_ACCOUNT_ID.' >&2
+            exit 1
+          }
+          node -e '
+            const expected = new URL(`https://${process.env.CDK_DOMAIN}/mcp`);
+            const actual = new URL(process.env.MCP_SMOKE_URL);
+            if (actual.href !== expected.href) throw new Error("MCP_SMOKE_URL must be https://DOMAIN_NAME/mcp");
+          '
+
+      - name: Generate validated environment context
+        run: node scripts/write-cdk-context.mjs "$DEPLOY_ENV"
+
+      - name: Synthesize before credentials
+        run: >-
+          pnpm --dir packages/cdk exec cdk synth
+          --context environment="$DEPLOY_ENV"
+          --output cdk.out
+          --quiet
+
+      - name: Configure short-lived AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
+        with:
+          role-to-assume: ${{ env.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: smithy-mcp-${{ env.DEPLOY_ENV }}-${{ github.run_id }}
+
+      - name: Deploy all edge and workload-region stacks
+        run: >-
+          pnpm --dir packages/cdk exec cdk deploy --all
+          --app cdk.out
+          --concurrency 1
+          --require-approval never
+          --outputs-file cdk-outputs.json
+
+      - name: Refresh documentation and wait for knowledge-base sync
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file=packages/cdk/ingestion-result.json
+          trap 'rm -f "$response_file"' EXIT
+          ingestion_function=$(node -e '
+            const outputs = require("./packages/cdk/cdk-outputs.json");
+            const stackName = `smithy-mcp-${process.env.DEPLOY_ENV}-knowledge-base`;
+            const functionName = outputs[stackName]?.IngestionFunctionName;
+            if (typeof functionName !== "string" || !functionName) {
+              throw new Error(`Missing IngestionFunctionName output for ${stackName}`);
+            }
+            process.stdout.write(functionName);
+          ')
+          function_error=$(aws lambda invoke \
+            --region "$CDK_WORKLOAD_REGION" \
+            --function-name "$ingestion_function" \
+            --invocation-type RequestResponse \
+            --cli-binary-format raw-in-base64-out \
+            --cli-connect-timeout 10 \
+            --cli-read-timeout 920 \
+            --payload '{}' \
+            --query FunctionError \
+            --output text \
+            "$response_file")
+          if [[ "$function_error" != 'None' ]]; then
+            echo "Ingestion Lambda failed: $function_error" >&2
+            exit 1
+          fi
+
+      - name: Verify MCP content readiness
+        run: pnpm smoke:mcp
+
+      - name: Upload deployment outputs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cdk-outputs-${{ env.DEPLOY_ENV }}-${{ github.run_id }}
+          path: packages/cdk/cdk-outputs.json
+          if-no-files-found: ignore
+          retention-days: 14

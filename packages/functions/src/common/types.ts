@@ -5,13 +5,5 @@ export interface SearchResult {
     type: 'S3';
   };
   score: number;
-  metadata?: Record<string, any>;
-}
-
-export interface MCPToolResponse {
-  content: Array<{
-    type: 'text';
-    text: string;
-  }>;
-  isError?: boolean;
+  metadata?: Record<string, unknown>;
 }

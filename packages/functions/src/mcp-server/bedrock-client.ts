@@ -1,12 +1,17 @@
-import { BedrockAgentRuntimeClient, RetrieveCommand } from '@aws-sdk/client-bedrock-agent-runtime';
-import { SearchResult } from '../common/types';
+import {
+  type BedrockAgentRuntimeClient,
+  RetrieveCommand
+} from '@aws-sdk/client-bedrock-agent-runtime';
+import { type SearchResult } from '../common/types';
 
-const client = new BedrockAgentRuntimeClient({});
-const KNOWLEDGE_BASE_ID = process.env.KNOWLEDGE_BASE_ID!;
-
-export async function searchKnowledgeBase(query: string, maxResults: number = 5): Promise<SearchResult[]> {
+export async function searchKnowledgeBase(
+  client: BedrockAgentRuntimeClient,
+  knowledgeBaseId: string,
+  query: string,
+  maxResults: number = 5
+): Promise<SearchResult[]> {
   const command = new RetrieveCommand({
-    knowledgeBaseId: KNOWLEDGE_BASE_ID,
+    knowledgeBaseId,
     retrievalQuery: { text: query },
     retrievalConfiguration: {
       vectorSearchConfiguration: { numberOfResults: maxResults }

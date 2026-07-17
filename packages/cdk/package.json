@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/**/*.test.ts",
     "synth": "cdk synth",
     "cdk": "cdk",
     "deploy:staging": "cdk deploy --all --context environment=staging --require-approval never",
@@ -11,13 +13,14 @@
     "destroy": "cdk destroy --all"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.160.0",
-    "constructs": "^10.3.0"
+    "aws-cdk-lib": "^2.261.0",
+    "constructs": "^10.7.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "aws-cdk": "^2.160.0",
+    "aws-cdk": "^2.1132.0",
     "esbuild": "^0.27.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.3.0"
   }
 }
