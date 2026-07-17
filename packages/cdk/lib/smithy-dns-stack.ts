@@ -2,8 +2,12 @@ import * as cdk from 'aws-cdk-lib';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import { Construct } from 'constructs';
 
-interface SmithyDnsStackProps extends cdk.StackProps {
+export interface SmithyDnsStackProps extends cdk.StackProps {
+  stage: string;
+  resourcePrefix: string;
   domainName: string;
+  hostedZoneId: string;
+  hostedZoneName: string;
 }
 
 export class SmithyDnsStack extends cdk.Stack {
@@ -12,13 +16,26 @@ export class SmithyDnsStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: SmithyDnsStackProps) {
     super(scope, id, props);
 
-    this.hostedZone = new route53.PublicHostedZone(this, 'HostedZone', {
-      zoneName: props.domainName,
+    this.hostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'HostedZone', {
+      hostedZoneId: props.hostedZoneId,
+      zoneName: props.hostedZoneName
     });
 
+    new cdk.CfnOutput(this, 'Environment', {
+      value: props.stage,
+      description: 'Deployment environment'
+    });
+    new cdk.CfnOutput(this, 'DomainName', {
+      value: props.domainName,
+      description: 'Environment-specific application domain'
+    });
     new cdk.CfnOutput(this, 'HostedZoneId', {
       value: this.hostedZone.hostedZoneId,
-      description: 'Route53 Hosted Zone ID',
+      description: 'Imported Route53 hosted zone ID'
+    });
+    new cdk.CfnOutput(this, 'HostedZoneName', {
+      value: this.hostedZone.zoneName,
+      description: 'Imported Route53 hosted zone name'
     });
   }
 }

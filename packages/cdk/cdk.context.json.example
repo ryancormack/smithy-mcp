@@ -1,13 +1,24 @@
 {
   "staging": {
+    "account": "111111111111",
+    "region": "us-east-1",
     "domain": "staging.example.com",
-    "knowledgeBaseId": "XXXXXXXXXXXX"
+    "hostedZoneId": "Z0123456789EXAMPLE",
+    "hostedZoneName": "example.com",
+    "budgetLimitUsd": 25,
+    "budgetNotificationEmail": "cloud-alerts@example.com",
+    "mcpReservedConcurrency": 10,
+    "wafRateLimit": 500
   },
   "production": {
-    "domain": "example.com",
-    "knowledgeBaseId": "XXXXXXXXXXXX"
-  },
-  "acknowledged-issue-numbers": [
-    34892
-  ]
+    "account": "222222222222",
+    "region": "us-west-2",
+    "domain": "mcp.example.com",
+    "hostedZoneId": "Z9876543210EXAMPLE",
+    "hostedZoneName": "example.com",
+    "budgetLimitUsd": 100,
+    "budgetNotificationEmail": "cloud-alerts@example.com",
+    "mcpReservedConcurrency": 50,
+    "wafRateLimit": 2000
+  }
 }

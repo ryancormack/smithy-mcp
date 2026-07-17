@@ -2,16 +2,20 @@
   "name": "smithy-mcp-server",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@10.28.1",
+  "engines": {
+    "node": ">=22 <23"
+  },
   "scripts": {
-    "build": "pnpm -r build",
-    "deploy": "pnpm --filter @smithy-mcp/cdk deploy",
-    "ingest": "pnpm --filter @smithy-mcp/ingestion start"
+    "build": "pnpm --filter @smithy-mcp/functions run build && pnpm --filter @smithy-mcp/ingestion run build && pnpm --filter @smithy-mcp/cdk run build",
+    "typecheck": "pnpm --filter @smithy-mcp/functions run typecheck && pnpm --filter @smithy-mcp/ingestion run typecheck && pnpm --filter @smithy-mcp/cdk run typecheck",
+    "test": "pnpm --filter @smithy-mcp/functions run test && pnpm --filter @smithy-mcp/ingestion run test && pnpm --filter @smithy-mcp/cdk run test",
+    "start": "pnpm --filter @smithy-mcp/functions run start",
+    "deploy": "pnpm --filter @smithy-mcp/cdk exec cdk deploy --all",
+    "ingest": "pnpm --filter @smithy-mcp/ingestion run start"
   },
   "devDependencies": {
-    "@types/node": "^20.11.0",
-    "typescript": "^5.3.0"
-  },
-  "dependencies": {
-    "express": "^5.1.0"
+    "@types/node": "^22.20.1",
+    "typescript": "^5.9.3"
   }
 }
