@@ -16,7 +16,8 @@ export default tseslint.config(
       '**/coverage/**',
       '**/cdk.out/**',
       '.pnpm-store/**',
-      'semantic-review/**'
+      'semantic-review/**',
+      '.kiro/**'
     ]
   },
   {

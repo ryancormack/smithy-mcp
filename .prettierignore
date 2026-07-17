@@ -7,6 +7,7 @@ semantic-review/
 pnpm-lock.yaml
 .spec/
 .vscode/
+.kiro/
 README.md
 draft.md
 architecture.*
