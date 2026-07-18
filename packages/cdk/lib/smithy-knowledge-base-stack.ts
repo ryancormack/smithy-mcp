@@ -161,9 +161,12 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       storageConfiguration: {
         type: 'S3_VECTORS',
         s3VectorsConfiguration: {
-          vectorBucketArn: vectorBucket.attrVectorBucketArn,
-          indexArn: vectorIndex.attrIndexArn,
-          indexName: `${props.resourcePrefix}-index`
+          // CloudFormation's S3VectorsConfiguration schema is a oneOf: either
+          // IndexArn alone, or VectorBucketArn + IndexName together. Supplying
+          // all three matches both subschemas and fails "early validation"
+          // with "2 subschemas matched instead of one". IndexArn alone
+          // uniquely identifies the index, so it is sufficient here.
+          indexArn: vectorIndex.attrIndexArn
         }
       },
       tags: { Environment: props.stage, Application: 'smithy-mcp' }
