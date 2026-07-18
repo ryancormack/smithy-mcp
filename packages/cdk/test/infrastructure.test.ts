@@ -64,10 +64,13 @@ test('creates an isolated S3 Vectors Bedrock knowledge base and data source', ()
     KnowledgeBaseConfiguration: Match.objectLike({ Type: 'VECTOR' }),
     StorageConfiguration: Match.objectLike({
       Type: 'S3_VECTORS',
-      S3VectorsConfiguration: Match.objectLike({
-        IndexArn: Match.anyValue(),
-        VectorBucketArn: Match.anyValue()
-      })
+      // CloudFormation's S3VectorsConfiguration schema is a oneOf: only
+      // IndexArn (identifying the index uniquely), never combined with
+      // VectorBucketArn/IndexName, or CloudFormation rejects the template
+      // with "2 subschemas matched instead of one".
+      S3VectorsConfiguration: {
+        IndexArn: Match.anyValue()
+      }
     })
   });
   template.hasResourceProperties('AWS::Bedrock::DataSource', {
