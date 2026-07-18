@@ -115,7 +115,7 @@ jobs:
       DEPLOY_ENV: ${{ needs.quality-gates.outputs.environment }}
       DEPLOY_REVISION: ${{ needs.quality-gates.outputs.revision }}
       AWS_DEPLOY_ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN || secrets.AWS_DEPLOY_ROLE_ARN }}
-      CDK_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID }}
+      CDK_ACCOUNT: ${{ vars.AWS_ACCOUNT_ID || secrets.AWS_ACCOUNT_ID }}
       CDK_WORKLOAD_REGION: ${{ vars.AWS_WORKLOAD_REGION }}
       CDK_DOMAIN: ${{ vars.DOMAIN_NAME }}
       CDK_HOSTED_ZONE_ID: ${{ vars.HOSTED_ZONE_ID }}
