@@ -13,6 +13,7 @@ interface EnvironmentConfig {
   budgetLimitUsd?: number;
   budgetNotificationEmail?: string;
   mcpReservedConcurrency?: number;
+  ingestionReservedConcurrency?: number;
   wafRateLimit?: number;
 }
 
@@ -89,6 +90,10 @@ function loadEnvironmentConfig(app: cdk.App, stage: string): EnvironmentConfig {
       raw.mcpReservedConcurrency,
       `${stage}.mcpReservedConcurrency`
     ),
+    ingestionReservedConcurrency: optionalPositiveInteger(
+      raw.ingestionReservedConcurrency,
+      `${stage}.ingestionReservedConcurrency`
+    ),
     wafRateLimit: optionalPositiveInteger(raw.wafRateLimit, `${stage}.wafRateLimit`)
   };
 }
@@ -129,7 +134,15 @@ const knowledgeBaseStack = new SmithyKnowledgeBaseStack(app, `SmithyKnowledgeBas
   stackName: `${resourcePrefix}-knowledge-base`,
   description: `${stage}: Smithy documentation, S3 Vectors, Bedrock, and ingestion`,
   budgetLimitUsd: config.budgetLimitUsd,
-  budgetNotificationEmail: config.budgetNotificationEmail
+  budgetNotificationEmail: config.budgetNotificationEmail,
+  // Staging defaults to 2 (rather than 1) so both configurable staging
+  // functions are capped at the same low value while the account's
+  // temporary 10-execution concurrency limit is in place (support ticket
+  // filed to raise it). Production keeps its original default of 1, which
+  // is sufficient because only one ingestion run is ever intended to be in
+  // flight at a time.
+  ingestionReservedConcurrency:
+    config.ingestionReservedConcurrency ?? (stage === 'production' ? 1 : 2)
 });
 
 new SmithyMcpServerStack(app, `SmithyMcpServer-${stage}`, {
@@ -143,7 +156,11 @@ new SmithyMcpServerStack(app, `SmithyMcpServer-${stage}`, {
   resourceRegion: config.region,
   domainName: config.domain,
   hostedZone: dnsStack.hostedZone,
-  mcpReservedConcurrency: config.mcpReservedConcurrency ?? (stage === 'production' ? 50 : 10),
+  // Staging defaults to 2 while the account's Lambda concurrency limit is
+  // temporarily 10 (support ticket filed to raise it), so the MCP server (2)
+  // plus ingestion (2) stay well under that total alongside other account
+  // functions. Production keeps its original default of 50.
+  mcpReservedConcurrency: config.mcpReservedConcurrency ?? (stage === 'production' ? 50 : 2),
   wafRateLimit: config.wafRateLimit ?? (stage === 'production' ? 2_000 : 500)
 });
 

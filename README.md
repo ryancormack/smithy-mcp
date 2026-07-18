@@ -44,6 +44,8 @@ There is no built-in end-user authentication beyond the public CloudFront bounda
 
 `staging` and `production` use names prefixed with `smithy-mcp-<environment>` and may use different AWS accounts, domains, workload regions, limits, and budgets. Production stacks enable CloudFormation termination protection. Separate accounts are recommended for a stronger boundary.
 
+Staging's default reserved concurrency (`mcpReservedConcurrency` and `ingestionReservedConcurrency`) is currently capped at 2 per function because the staging AWS account has a temporary account-wide Lambda concurrency limit of 10 (a support ticket to raise this has been filed). Raise both context values together once the account limit increases, keeping their sum comfortably below the account total alongside any other functions in the same account/region.
+
 The workload region contains the documentation bucket, S3 Vectors bucket/index, Bedrock knowledge base/data source, ingestion Lambda, EventBridge schedule, DLQ, and related alarms. The edge region is always `us-east-1` and contains the imported Route 53 zone reference, ACM certificate, CloudFront, WAF, Lambda@Edge payload hasher, website bucket, and MCP Lambda/Function URL. When the workload region differs from `us-east-1`, CDK cross-region references connect the stacks.
 
 ## Prerequisites
@@ -176,7 +178,8 @@ The app selects `staging` by default; pass `--context environment=production` ex
 | `hostedZoneName` | yes | Imported zone name; one trailing dot is removed. |
 | `budgetLimitUsd` | no | Positive number; must be paired with `budgetNotificationEmail`. |
 | `budgetNotificationEmail` | no | Non-empty notification address; must be paired with `budgetLimitUsd`. |
-| `mcpReservedConcurrency` | no | Positive integer; default 10 for staging and 50 for production. |
+| `mcpReservedConcurrency` | no | Positive integer; default 2 for staging and 50 for production. |
+| `ingestionReservedConcurrency` | no | Positive integer; default 2 for staging and 1 for production. |
 | `wafRateLimit` | no | Positive integer requests per source IP per five-minute window; default 500 for staging and 2,000 for production. |
 
 The checked-in [example](packages/cdk/cdk.context.json.example) uses reserved example values only. CI/deployment generate the same shape with `scripts/write-cdk-context.mjs` from `CDK_*` environment variables and write it with mode `0600`.
@@ -203,6 +206,7 @@ Create GitHub Environments named `staging` and `production`. Restrict both to `m
 | `MCP_SMOKE_URL` | yes | Exactly `https://DOMAIN_NAME/mcp`. |
 | `BUDGET_LIMIT_USD` and `BUDGET_NOTIFICATION_EMAIL` | optional pair | Environment budget. |
 | `MCP_RESERVED_CONCURRENCY` | optional | MCP Lambda reserved concurrency. |
+| `INGESTION_RESERVED_CONCURRENCY` | optional | Ingestion Lambda reserved concurrency. |
 | `WAF_RATE_LIMIT` | optional | WAF five-minute per-IP rate. |
 
 `MCP_SMOKE_BEARER_TOKEN` is an optional environment **secret** that makes the smoke script send an `Authorization: Bearer` header. Nothing in the application or provisioned stack validates that token; configure an external viewer-auth layer before relying on it.
@@ -276,7 +280,7 @@ CloudFormation automatically rolls back a failed stack update. For a successfull
 
 ## Ingestion, publication, and Bedrock sync
 
-The ingestion Lambda has one reserved concurrent execution, two asynchronous retries, a two-hour maximum event age, a 15-minute timeout, 2 GiB memory, and 4 GiB ephemeral storage. Each run sparse-fetches only `docs/` from the configured Git ref, resolves the immutable upstream SHA, converts `docs/source-2.0/**/*.rst` with pandoc, and adds deterministic front matter.
+The ingestion Lambda has a reserved concurrent execution limit (1 by default in production, 2 in staging; see `ingestionReservedConcurrency`), two asynchronous retries, a two-hour maximum event age, a 15-minute timeout, 2 GiB memory, and 4 GiB ephemeral storage. Reserved concurrency only bounds how many instances Lambda will run in parallel; the S3 conditional publication lock (see below) is what actually prevents overlapping ingestion runs from corrupting shared state, so raising this value above 1 is safe. Each run sparse-fetches only `docs/` from the configured Git ref, resolves the immutable upstream SHA, converts `docs/source-2.0/**/*.rst` with pandoc, and adds deterministic front matter.
 
 Publication is staged, guarded, and convergent:
 

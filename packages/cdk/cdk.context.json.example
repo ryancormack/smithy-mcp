@@ -7,7 +7,8 @@
     "hostedZoneName": "example.invalid",
     "budgetLimitUsd": 25,
     "budgetNotificationEmail": "cloud-alerts@example.invalid",
-    "mcpReservedConcurrency": 10,
+    "mcpReservedConcurrency": 2,
+    "ingestionReservedConcurrency": 2,
     "wafRateLimit": 500
   },
   "production": {

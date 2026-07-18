@@ -26,6 +26,7 @@ export interface SmithyKnowledgeBaseStackProps extends cdk.StackProps {
   resourcePrefix: string;
   budgetLimitUsd?: number;
   budgetNotificationEmail?: string;
+  ingestionReservedConcurrency: number;
 }
 
 function repositoryRoot(): string {
@@ -217,7 +218,7 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       timeout: cdk.Duration.minutes(15),
       memorySize: 2048,
       ephemeralStorageSize: cdk.Size.gibibytes(4),
-      reservedConcurrentExecutions: 1,
+      reservedConcurrentExecutions: props.ingestionReservedConcurrency,
       tracing: lambda.Tracing.ACTIVE,
       logGroup: ingestionLogGroup,
       environment: {

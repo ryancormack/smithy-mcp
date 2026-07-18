@@ -75,6 +75,10 @@ if (budgetNotificationEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(budgetNotifica
 }
 
 const mcpReservedConcurrency = optionalPositiveNumber('CDK_MCP_RESERVED_CONCURRENCY', true);
+const ingestionReservedConcurrency = optionalPositiveNumber(
+  'CDK_INGESTION_RESERVED_CONCURRENCY',
+  true
+);
 const wafRateLimit = optionalPositiveNumber('CDK_WAF_RATE_LIMIT', true);
 const config = {
   account,
@@ -84,6 +88,7 @@ const config = {
   hostedZoneName,
   ...(budgetLimitUsd === undefined ? {} : { budgetLimitUsd, budgetNotificationEmail }),
   ...(mcpReservedConcurrency === undefined ? {} : { mcpReservedConcurrency }),
+  ...(ingestionReservedConcurrency === undefined ? {} : { ingestionReservedConcurrency }),
   ...(wafRateLimit === undefined ? {} : { wafRateLimit })
 };
 

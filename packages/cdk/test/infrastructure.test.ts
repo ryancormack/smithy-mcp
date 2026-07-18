@@ -11,12 +11,17 @@ import { SmithyMcpServerStack } from '../lib/smithy-mcp-server-stack';
 
 const env = { account: '111111111111', region: 'us-east-1' };
 
-function knowledgeBaseTemplate(stage = 'staging', withBudget = true): Template {
+function knowledgeBaseTemplate(
+  stage = 'staging',
+  withBudget = true,
+  ingestionReservedConcurrency = 2
+): Template {
   const app = new cdk.App();
   const stack = new SmithyKnowledgeBaseStack(app, `Knowledge-${stage}`, {
     env,
     stage,
     resourcePrefix: `smithy-mcp-${stage}`,
+    ingestionReservedConcurrency,
     ...(withBudget
       ? {
           budgetLimitUsd: 25,
@@ -44,7 +49,7 @@ function mcpTemplate(stage = 'staging'): Template {
     resourceRegion: 'us-west-2',
     domainName: stage === 'production' ? 'mcp.example.com' : 'staging.example.com',
     hostedZone,
-    mcpReservedConcurrency: stage === 'production' ? 50 : 10,
+    mcpReservedConcurrency: stage === 'production' ? 50 : 2,
     wafRateLimit: 500
   });
   return Template.fromStack(stack);
@@ -134,7 +139,7 @@ test('configures scheduled root-context ingestion with bounded retries and exact
     Architectures: ['x86_64'],
     MemorySize: 2048,
     Timeout: 900,
-    ReservedConcurrentExecutions: 1,
+    ReservedConcurrentExecutions: 2,
     TracingConfig: { Mode: 'Active' },
     EphemeralStorage: { Size: 4096 },
     Environment: {
@@ -199,7 +204,7 @@ test('exposes only exact mcp path through CloudFront and an IAM-authenticated fu
   template.hasResourceProperties('AWS::Lambda::Function', {
     FunctionName: 'smithy-mcp-staging-server',
     PackageType: 'Image',
-    ReservedConcurrentExecutions: 10,
+    ReservedConcurrentExecutions: 2,
     TracingConfig: { Mode: 'Active' },
     Environment: {
       Variables: Match.objectLike({
@@ -319,7 +324,7 @@ test('retains logs and isolates stage-qualified names and concurrency', () => {
 
   assert.match(stagingText, /smithy-mcp-staging-server/);
   assert.match(productionText, /smithy-mcp-production-server/);
-  assert.match(stagingText, /"ReservedConcurrentExecutions":10/);
+  assert.match(stagingText, /"ReservedConcurrentExecutions":2/);
   assert.match(productionText, /"ReservedConcurrentExecutions":50/);
 
   for (const template of [staging, production]) {
@@ -329,4 +334,30 @@ test('retains logs and isolates stage-qualified names and concurrency', () => {
     assert.ok(logGroups.length >= 1);
     assert.ok(logGroups.every(resource => resource.DeletionPolicy === 'Retain'));
   }
+});
+
+test('keeps staging total reserved concurrency under the temporary account limit', () => {
+  // The staging AWS account currently has a temporary account-wide Lambda
+  // concurrency limit of 10 (a support ticket to raise it has been filed).
+  // This locks in bin/app.ts's staging defaults for the MCP server and
+  // ingestion functions so a future change to only one of them cannot
+  // silently push the total back over that limit.
+  const mcpConcurrency = mcpTemplate('staging').findResources('AWS::Lambda::Function', {
+    Properties: { FunctionName: 'smithy-mcp-staging-server' }
+  });
+  const ingestionConcurrency = knowledgeBaseTemplate('staging', true, 2).findResources(
+    'AWS::Lambda::Function',
+    {
+      Properties: { FunctionName: 'smithy-mcp-staging-ingestion' }
+    }
+  );
+  const mcpValue = Object.values(mcpConcurrency)[0]?.Properties?.ReservedConcurrentExecutions;
+  const ingestionValue =
+    Object.values(ingestionConcurrency)[0]?.Properties?.ReservedConcurrentExecutions;
+  assert.equal(mcpValue, 2);
+  assert.equal(ingestionValue, 2);
+  assert.ok(
+    mcpValue + ingestionValue < 10,
+    'staging reserved concurrency across both configurable functions must stay under the account limit'
+  );
 });
