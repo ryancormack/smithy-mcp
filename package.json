@@ -20,12 +20,12 @@
     "smoke:mcp": "node scripts/smoke-mcp.mjs"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.5",
-    "@types/node": "^22.20.1",
-    "eslint": "^9.39.5",
-    "globals": "^16.5.0",
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.1.1",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
     "prettier": "^3.9.5",
-    "typescript": "^5.9.3",
+    "typescript": "^7.0.2",
     "typescript-eslint": "^8.64.0"
   }
 }
