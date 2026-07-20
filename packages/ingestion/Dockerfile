@@ -1,4 +1,4 @@
-FROM public.ecr.aws/lambda/nodejs:22 AS build
+FROM public.ecr.aws/lambda/nodejs:24 AS build
 
 ARG PANDOC_VERSION=3.6.4
 ARG PANDOC_SHA256_AMD64=5def6e1ff535e397becce292ee97767a947306150b9fb1488003b67ac3417c5e
@@ -32,7 +32,7 @@ COPY packages/ingestion packages/ingestion
 RUN pnpm --filter @smithy-mcp/ingestion run build \
     && pnpm --filter @smithy-mcp/ingestion deploy --prod --legacy /asset
 
-FROM public.ecr.aws/lambda/nodejs:22 AS runtime
+FROM public.ecr.aws/lambda/nodejs:24 AS runtime
 
 RUN dnf install -y git \
     && dnf clean all
