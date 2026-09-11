@@ -53,6 +53,15 @@ function mcpTemplate(stage = 'staging'): Template {
 test('creates an isolated S3 Vectors Bedrock knowledge base and data source', () => {
   const template = knowledgeBaseTemplate();
   template.resourceCountIs('AWS::S3Vectors::VectorBucket', 1);
+  // Step 1: both the existing v1 index and the new v2 index (with
+  // non-filterable Bedrock metadata) exist; the KB still points at v1.
+  template.resourceCountIs('AWS::S3Vectors::Index', 2);
+  template.hasResourceProperties('AWS::S3Vectors::Index', {
+    DataType: 'float32',
+    Dimension: 1024,
+    DistanceMetric: 'cosine',
+    IndexName: 'smithy-mcp-staging-index'
+  });
   template.hasResourceProperties('AWS::S3Vectors::Index', {
     DataType: 'float32',
     Dimension: 1024,
