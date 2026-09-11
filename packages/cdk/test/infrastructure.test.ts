@@ -57,7 +57,10 @@ test('creates an isolated S3 Vectors Bedrock knowledge base and data source', ()
     DataType: 'float32',
     Dimension: 1024,
     DistanceMetric: 'cosine',
-    IndexName: 'smithy-mcp-staging-index'
+    IndexName: 'smithy-mcp-staging-index-v2',
+    MetadataConfiguration: {
+      NonFilterableMetadataKeys: ['AMAZON_BEDROCK_TEXT', 'AMAZON_BEDROCK_METADATA']
+    }
   });
   template.hasResourceProperties('AWS::Bedrock::KnowledgeBase', {
     Name: 'smithy-mcp-staging-kb',

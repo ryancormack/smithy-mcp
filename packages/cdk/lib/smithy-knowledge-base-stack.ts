@@ -77,12 +77,18 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     });
     vectorBucket.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
 
-    const vectorIndex = new s3vectors.CfnIndex(this, 'SmithyVectorIndex', {
+    const vectorIndex = new s3vectors.CfnIndex(this, 'SmithyVectorIndexV2', {
       vectorBucketArn: vectorBucket.attrVectorBucketArn,
-      indexName: `${props.resourcePrefix}-index`,
+      indexName: `${props.resourcePrefix}-index-v2`,
       dataType: 'float32',
       dimension: EMBEDDING_DIMENSIONS,
       distanceMetric: 'cosine',
+      // Bedrock writes the chunk text + source JSON into per-vector metadata.
+      // S3 Vectors caps FILTERABLE metadata at 2048 bytes; these keys are never
+      // filtered on, so mark them non-filterable to keep them out of that budget.
+      metadataConfiguration: {
+        nonFilterableMetadataKeys: ['AMAZON_BEDROCK_TEXT', 'AMAZON_BEDROCK_METADATA']
+      },
       tags: [{ key: 'Environment', value: props.stage }]
     });
     vectorIndex.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
