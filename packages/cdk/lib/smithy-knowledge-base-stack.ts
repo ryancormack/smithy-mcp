@@ -77,22 +77,38 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     });
     vectorBucket.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
 
-    const vectorIndex = new s3vectors.CfnIndex(this, 'SmithyVectorIndexV2', {
+    // Existing (v1) index the knowledge base currently points at. Kept so this
+    // deploy does not replace the KB; step 2 repoints the KB to v2 and drops v1.
+    const legacyVectorIndex = new s3vectors.CfnIndex(this, 'SmithyVectorIndex', {
+      vectorBucketArn: vectorBucket.attrVectorBucketArn,
+      indexName: `${props.resourcePrefix}-index`,
+      dataType: 'float32',
+      dimension: EMBEDDING_DIMENSIONS,
+      distanceMetric: 'cosine',
+      tags: [{ key: 'Environment', value: props.stage }]
+    });
+    legacyVectorIndex.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+    legacyVectorIndex.addResourceDependency(vectorBucket);
+
+    // New (v2) index with non-filterable Bedrock metadata keys, so the chunk
+    // text and source JSON do not count against the 2048-byte filterable cap.
+    // Provisioned now but not yet used; step 2 repoints the KB to it.
+    const vectorIndexV2 = new s3vectors.CfnIndex(this, 'SmithyVectorIndexV2', {
       vectorBucketArn: vectorBucket.attrVectorBucketArn,
       indexName: `${props.resourcePrefix}-index-v2`,
       dataType: 'float32',
       dimension: EMBEDDING_DIMENSIONS,
       distanceMetric: 'cosine',
-      // Bedrock writes the chunk text + source JSON into per-vector metadata.
-      // S3 Vectors caps FILTERABLE metadata at 2048 bytes; these keys are never
-      // filtered on, so mark them non-filterable to keep them out of that budget.
       metadataConfiguration: {
         nonFilterableMetadataKeys: ['AMAZON_BEDROCK_TEXT', 'AMAZON_BEDROCK_METADATA']
       },
       tags: [{ key: 'Environment', value: props.stage }]
     });
-    vectorIndex.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
-    vectorIndex.addResourceDependency(vectorBucket);
+    vectorIndexV2.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+    vectorIndexV2.addResourceDependency(vectorBucket);
+
+    // The knowledge base still uses v1 in this step (repointed in step 2).
+    const vectorIndex = legacyVectorIndex;
 
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       roleName: `${props.resourcePrefix}-bedrock-kb`,
@@ -147,7 +163,7 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
           's3vectors:GetVectors',
           's3vectors:DeleteVectors'
         ],
-        resources: [vectorIndex.attrIndexArn]
+        resources: [legacyVectorIndex.attrIndexArn, vectorIndexV2.attrIndexArn]
       })
     );
 
