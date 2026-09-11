@@ -86,7 +86,7 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       tags: [{ key: 'Environment', value: props.stage }]
     });
     vectorIndex.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
-    vectorIndex.addDependency(vectorBucket);
+    vectorIndex.addResourceDependency(vectorBucket);
 
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       roleName: `${props.resourcePrefix}-bedrock-kb`,
@@ -194,7 +194,7 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
         }
       }
     });
-    dataSource.addDependency(knowledgeBase);
+    dataSource.addResourceDependency(knowledgeBase);
 
     this.knowledgeBaseId = knowledgeBase.attrKnowledgeBaseId;
     this.dataSourceId = dataSource.attrDataSourceId;
