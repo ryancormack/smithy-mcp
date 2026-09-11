@@ -208,17 +208,42 @@ jobs:
             }
             process.stdout.write(functionName);
           ')
-          function_error=$(aws lambda invoke \
-            --region "$CDK_WORKLOAD_REGION" \
-            --function-name "$ingestion_function" \
-            --invocation-type RequestResponse \
-            --cli-binary-format raw-in-base64-out \
-            --cli-connect-timeout 10 \
-            --cli-read-timeout 920 \
-            --payload '{}' \
-            --query FunctionError \
-            --output text \
-            "$response_file")
+          function_error=None
+          attempt=1
+          max_attempts=18
+          while true; do
+            set +e
+            invoke_output=$(aws lambda invoke \
+              --region "$CDK_WORKLOAD_REGION" \
+              --function-name "$ingestion_function" \
+              --invocation-type RequestResponse \
+              --cli-binary-format raw-in-base64-out \
+              --cli-connect-timeout 10 \
+              --cli-read-timeout 920 \
+              --payload '{}' \
+              --query FunctionError \
+              --output text \
+              "$response_file" 2>&1)
+            invoke_status=$?
+            set -e
+            if [[ $invoke_status -eq 0 ]]; then
+              function_error=$invoke_output
+              break
+            fi
+            # Reserved concurrency 1 is a single-writer invariant (publication
+            # lock, sync-pending record); wait out a scheduled/in-flight run
+            # rather than raising it. 18x60s outlasts the 15-min Lambda timeout.
+            if [[ "$invoke_output" == *ReservedFunctionConcurrentInvocationLimitExceeded* \
+               || "$invoke_output" == *TooManyRequestsException* ]] \
+               && [[ $attempt -lt $max_attempts ]]; then
+              echo "Ingestion slot busy (attempt ${attempt}/${max_attempts}); retrying in 60s: ${invoke_output}" >&2
+              attempt=$((attempt + 1))
+              sleep 60
+              continue
+            fi
+            echo "Ingestion Lambda invoke failed: ${invoke_output}" >&2
+            exit 1
+          done
           if [[ "$function_error" != 'None' ]]; then
             echo "Ingestion Lambda failed: $function_error" >&2
             exit 1
