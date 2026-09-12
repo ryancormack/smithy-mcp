@@ -109,10 +109,10 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     vectorIndexV2.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
     vectorIndexV2.addResourceDependency(vectorBucket);
 
-    // Deploy 1 (server decouple) keeps the KB on v1 so the KB is not touched
-    // this deploy. Deploy 2 repoints it to vectorIndexV2 once the server no
-    // longer imports the KB-id cross-stack export.
-    const vectorIndex = legacyVectorIndex;
+    // Deploy 2: the KB now uses the v2 index (non-filterable Bedrock metadata,
+    // which fixes the 2048-byte filterable-metadata ingestion failure). v1 is
+    // kept only so its RETAINed index is not orphaned before manual cleanup.
+    const vectorIndex = vectorIndexV2;
 
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       roleName: `${props.resourcePrefix}-bedrock-kb`,
@@ -176,8 +176,8 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     // smithy-mcp-<env>-kb is fixed, so an in-place replacement collides on the
     // name (409 AlreadyExists); a distinct -kb-v2 name creates cleanly, and the
     // old KB is left for manual cleanup. This KB points at the v2 index.
-    const knowledgeBase = new bedrock.CfnKnowledgeBase(this, 'SmithyKnowledgeBase', {
-      name: `${props.resourcePrefix}-kb`,
+    const knowledgeBase = new bedrock.CfnKnowledgeBase(this, 'SmithyKnowledgeBaseV2', {
+      name: `${props.resourcePrefix}-kb-v2`,
       description: `${props.stage} Smithy documentation knowledge base`,
       roleArn: knowledgeBaseRole.roleArn,
       knowledgeBaseConfiguration: {
@@ -242,23 +242,6 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       parameterName: this.knowledgeBaseIdParamName,
       stringValue: this.knowledgeBaseId
     });
-
-    // Keep producing the OLD cross-stack export for one deploy while the server
-    // migrates to the SSM parameter above. The deployed server stack still
-    // imports this export name; `cdk deploy --all` no longer sees a dependency
-    // edge (the server reads SSM now), so it may update the KB stack first and
-    // try to DELETE this export while the server still imports it, which
-    // CloudFormation refuses ("Cannot delete export ... in use"). Recreating it
-    // at its UNCHANGED value keeps the import valid so both stacks update in one
-    // deploy. Value unchanged, so no "cannot update export" either. Removed in a
-    // later cleanup deploy once no stack imports it.
-    const retainedKbIdExport = new cdk.CfnOutput(this, 'RetainedKnowledgeBaseIdExport', {
-      value: this.knowledgeBaseId,
-      exportName: `${props.resourcePrefix}-knowledge-base:ExportsOutputFnGetAttSmithyKnowledgeBaseKnowledgeBaseIdA3ABAB31`
-    });
-    retainedKbIdExport.overrideLogicalId(
-      'ExportsOutputFnGetAttSmithyKnowledgeBaseKnowledgeBaseIdA3ABAB31'
-    );
 
     const ingestionLogGroup = new logs.LogGroup(this, 'IngestionLogGroup', {
       logGroupName: `/aws/lambda/${props.resourcePrefix}-ingestion`,

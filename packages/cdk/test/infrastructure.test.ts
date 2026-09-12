@@ -53,9 +53,9 @@ function mcpTemplate(stage = 'staging'): Template {
 test('creates an isolated S3 Vectors Bedrock knowledge base and data source', () => {
   const template = knowledgeBaseTemplate();
   template.resourceCountIs('AWS::S3Vectors::VectorBucket', 1);
-  // Deploy 1 (server decouple): both indexes exist; the KB is UNCHANGED on v1.
-  // The KB id is published via an SSM parameter (read by the server stack)
-  // instead of a cross-stack export. Deploy 2 repoints the KB to v2.
+  // Deploy 2: both indexes exist; the KB now points at the v2 index. The KB id
+  // is still published via SSM for the server stack; the retained cross-stack
+  // export is dropped now that no stack imports it.
   template.resourceCountIs('AWS::S3Vectors::Index', 2);
   template.hasResourceProperties('AWS::S3Vectors::Index', {
     DataType: 'float32',
@@ -73,13 +73,13 @@ test('creates an isolated S3 Vectors Bedrock knowledge base and data source', ()
     }
   });
   template.hasResourceProperties('AWS::Bedrock::KnowledgeBase', {
-    Name: 'smithy-mcp-staging-kb',
+    Name: 'smithy-mcp-staging-kb-v2',
     KnowledgeBaseConfiguration: Match.objectLike({ Type: 'VECTOR' }),
     StorageConfiguration: Match.objectLike({
       Type: 'S3_VECTORS',
-      // The KB still points at the v1 index this deploy; deploy 2 moves it to v2.
+      // The KB points at the v2 index (the metadata fix).
       S3VectorsConfiguration: {
-        IndexArn: { 'Fn::GetAtt': ['SmithyVectorIndex', 'IndexArn'] }
+        IndexArn: { 'Fn::GetAtt': ['SmithyVectorIndexV2', 'IndexArn'] }
       }
     })
   });
