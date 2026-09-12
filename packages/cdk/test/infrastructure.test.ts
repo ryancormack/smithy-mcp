@@ -53,8 +53,7 @@ function mcpTemplate(stage = 'staging'): Template {
 test('creates an isolated S3 Vectors Bedrock knowledge base and data source', () => {
   const template = knowledgeBaseTemplate();
   template.resourceCountIs('AWS::S3Vectors::VectorBucket', 1);
-  // Step 1: both the existing v1 index and the new v2 index (with
-  // non-filterable Bedrock metadata) exist; the KB still points at v1.
+  // Step 2: both the v1 and v2 indexes still exist; the KB now points at v2.
   template.resourceCountIs('AWS::S3Vectors::Index', 2);
   template.hasResourceProperties('AWS::S3Vectors::Index', {
     DataType: 'float32',
@@ -72,16 +71,17 @@ test('creates an isolated S3 Vectors Bedrock knowledge base and data source', ()
     }
   });
   template.hasResourceProperties('AWS::Bedrock::KnowledgeBase', {
-    Name: 'smithy-mcp-staging-kb',
+    Name: 'smithy-mcp-staging-kb-v2',
     KnowledgeBaseConfiguration: Match.objectLike({ Type: 'VECTOR' }),
     StorageConfiguration: Match.objectLike({
       Type: 'S3_VECTORS',
       // CloudFormation's S3VectorsConfiguration schema is a oneOf: only
       // IndexArn (identifying the index uniquely), never combined with
       // VectorBucketArn/IndexName, or CloudFormation rejects the template
-      // with "2 subschemas matched instead of one".
+      // with "2 subschemas matched instead of one". The KB now points at the
+      // v2 index (non-filterable metadata), not v1.
       S3VectorsConfiguration: {
-        IndexArn: Match.anyValue()
+        IndexArn: { 'Fn::GetAtt': ['SmithyVectorIndexV2', 'IndexArn'] }
       }
     })
   });
