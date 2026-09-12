@@ -40,7 +40,7 @@ function mcpTemplate(stage = 'staging'): Template {
     stage,
     resourcePrefix: `smithy-mcp-${stage}`,
     bucket,
-    knowledgeBaseId: 'ABCDEFGHIJ',
+    knowledgeBaseIdParamName: `/smithy-mcp/${stage}/kb-id`,
     resourceRegion: 'us-west-2',
     domainName: stage === 'production' ? 'mcp.example.com' : 'staging.example.com',
     hostedZone,
@@ -53,7 +53,9 @@ function mcpTemplate(stage = 'staging'): Template {
 test('creates an isolated S3 Vectors Bedrock knowledge base and data source', () => {
   const template = knowledgeBaseTemplate();
   template.resourceCountIs('AWS::S3Vectors::VectorBucket', 1);
-  // Step 2: both the v1 and v2 indexes still exist; the KB now points at v2.
+  // Deploy 1 (server decouple): both indexes exist; the KB is UNCHANGED on v1.
+  // The KB id is published via an SSM parameter (read by the server stack)
+  // instead of a cross-stack export. Deploy 2 repoints the KB to v2.
   template.resourceCountIs('AWS::S3Vectors::Index', 2);
   template.hasResourceProperties('AWS::S3Vectors::Index', {
     DataType: 'float32',
@@ -71,19 +73,19 @@ test('creates an isolated S3 Vectors Bedrock knowledge base and data source', ()
     }
   });
   template.hasResourceProperties('AWS::Bedrock::KnowledgeBase', {
-    Name: 'smithy-mcp-staging-kb-v2',
+    Name: 'smithy-mcp-staging-kb',
     KnowledgeBaseConfiguration: Match.objectLike({ Type: 'VECTOR' }),
     StorageConfiguration: Match.objectLike({
       Type: 'S3_VECTORS',
-      // CloudFormation's S3VectorsConfiguration schema is a oneOf: only
-      // IndexArn (identifying the index uniquely), never combined with
-      // VectorBucketArn/IndexName, or CloudFormation rejects the template
-      // with "2 subschemas matched instead of one". The KB now points at the
-      // v2 index (non-filterable metadata), not v1.
+      // The KB still points at the v1 index this deploy; deploy 2 moves it to v2.
       S3VectorsConfiguration: {
-        IndexArn: { 'Fn::GetAtt': ['SmithyVectorIndexV2', 'IndexArn'] }
+        IndexArn: { 'Fn::GetAtt': ['SmithyVectorIndex', 'IndexArn'] }
       }
     })
+  });
+  // KB id is published to SSM for the server stack (no cross-stack export lock).
+  template.hasResourceProperties('AWS::SSM::Parameter', {
+    Name: '/smithy-mcp/staging/kb-id'
   });
   template.hasResourceProperties('AWS::Bedrock::DataSource', {
     Name: 'smithy-mcp-staging-s3-source',

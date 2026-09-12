@@ -12,6 +12,7 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3vectors from 'aws-cdk-lib/aws-s3vectors';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { type Construct } from 'constructs';
 
@@ -38,6 +39,7 @@ function repositoryRoot(): string {
 export class SmithyKnowledgeBaseStack extends cdk.Stack {
   public readonly bucket: s3.IBucket;
   public readonly knowledgeBaseId: string;
+  public readonly knowledgeBaseIdParamName: string;
   public readonly dataSourceId: string;
   public readonly ingestionFunction: lambda.DockerImageFunction;
 
@@ -107,9 +109,10 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     vectorIndexV2.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
     vectorIndexV2.addResourceDependency(vectorBucket);
 
-    // Step 2: the knowledge base now uses v2. v1 is kept only so its RETAINed
-    // index is not orphaned by CloudFormation before manual cleanup.
-    const vectorIndex = vectorIndexV2;
+    // Deploy 1 (server decouple) keeps the KB on v1 so the KB is not touched
+    // this deploy. Deploy 2 repoints it to vectorIndexV2 once the server no
+    // longer imports the KB-id cross-stack export.
+    const vectorIndex = legacyVectorIndex;
 
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       roleName: `${props.resourcePrefix}-bedrock-kb`,
@@ -173,8 +176,8 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     // smithy-mcp-<env>-kb is fixed, so an in-place replacement collides on the
     // name (409 AlreadyExists); a distinct -kb-v2 name creates cleanly, and the
     // old KB is left for manual cleanup. This KB points at the v2 index.
-    const knowledgeBase = new bedrock.CfnKnowledgeBase(this, 'SmithyKnowledgeBaseV2', {
-      name: `${props.resourcePrefix}-kb-v2`,
+    const knowledgeBase = new bedrock.CfnKnowledgeBase(this, 'SmithyKnowledgeBase', {
+      name: `${props.resourcePrefix}-kb`,
       description: `${props.stage} Smithy documentation knowledge base`,
       roleArn: knowledgeBaseRole.roleArn,
       knowledgeBaseConfiguration: {
@@ -227,21 +230,18 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     this.knowledgeBaseId = knowledgeBase.attrKnowledgeBaseId;
     this.dataSourceId = dataSource.attrDataSourceId;
 
-    // Retain the OLD auto-generated cross-stack export name across the KB
-    // logical-id rename (SmithyKnowledgeBase -> SmithyKnowledgeBaseV2). The
-    // server stack imports this exact export name; if it disappears when the KB
-    // is renamed, CloudFormation refuses ("Cannot delete export ... in use").
-    // Recreating the same export name + Output logical id, now sourced from the
-    // new KB, keeps the server import valid so both stacks update in one deploy.
-    // This retainer is removed in the follow-up deploy once the server stack no
-    // longer imports it (step 2b).
-    const retainedKbIdExport = new cdk.CfnOutput(this, 'RetainedKnowledgeBaseIdExport', {
-      value: this.knowledgeBaseId,
-      exportName: `${props.resourcePrefix}-knowledge-base:ExportsOutputFnGetAttSmithyKnowledgeBaseKnowledgeBaseIdA3ABAB31`
+    // Publish the KB id via SSM so the server stack reads it from a parameter
+    // instead of a CloudFormation cross-stack export. CloudFormation refuses to
+    // update or delete an export while another stack imports it, which blocks
+    // ever repointing the KB to a new index (the export value would change).
+    // An SSM parameter has no such lock: the KB can be replaced freely and the
+    // server picks up the new id on its next deploy. Fixed name so the server
+    // resolves it without a cross-stack dependency.
+    this.knowledgeBaseIdParamName = `/smithy-mcp/${props.stage}/kb-id`;
+    new ssm.StringParameter(this, 'KnowledgeBaseIdParam', {
+      parameterName: this.knowledgeBaseIdParamName,
+      stringValue: this.knowledgeBaseId
     });
-    retainedKbIdExport.overrideLogicalId(
-      'ExportsOutputFnGetAttSmithyKnowledgeBaseKnowledgeBaseIdA3ABAB31'
-    );
 
     const ingestionLogGroup = new logs.LogGroup(this, 'IngestionLogGroup', {
       logGroupName: `/aws/lambda/${props.resourcePrefix}-ingestion`,

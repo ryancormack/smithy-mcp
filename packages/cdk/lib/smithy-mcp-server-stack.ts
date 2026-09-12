@@ -12,6 +12,7 @@ import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as route53Targets from 'aws-cdk-lib/aws-route53-targets';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as wafv2 from 'aws-cdk-lib/aws-wafv2';
 import { type Construct } from 'constructs';
 
@@ -19,7 +20,7 @@ export interface SmithyMcpServerStackProps extends cdk.StackProps {
   stage: string;
   resourcePrefix: string;
   bucket: s3.IBucket;
-  knowledgeBaseId: string;
+  knowledgeBaseIdParamName: string;
   resourceRegion: string;
   domainName: string;
   hostedZone: route53.IHostedZone;
@@ -38,6 +39,15 @@ export class SmithyMcpServerStack extends cdk.Stack {
 
   constructor(scope: Construct, id: string, props: SmithyMcpServerStackProps) {
     super(scope, id, props);
+
+    // KB id comes from an SSM parameter the knowledge-base stack writes, not a
+    // CloudFormation cross-stack export. This removes the import lock that
+    // blocks the KB stack from ever changing the KB id (see the KB stack's
+    // KnowledgeBaseIdParam comment). Resolved at synth from the parameter name.
+    const knowledgeBaseId = ssm.StringParameter.valueForStringParameter(
+      this,
+      props.knowledgeBaseIdParamName
+    );
 
     this.websiteBucket = new s3.Bucket(this, 'WebsiteBucket', {
       bucketName: `${props.resourcePrefix}-website-${this.account}-${this.region}`,
@@ -69,7 +79,7 @@ export class SmithyMcpServerStack extends cdk.Stack {
       tracing: lambda.Tracing.ACTIVE,
       logGroup: mcpLogGroup,
       environment: {
-        KNOWLEDGE_BASE_ID: props.knowledgeBaseId,
+        KNOWLEDGE_BASE_ID: knowledgeBaseId,
         BUCKET_NAME: props.bucket.bucketName,
         AWS_RESOURCE_REGION: props.resourceRegion,
         MCP_ALLOWED_ORIGINS: `https://${props.domainName}`,
@@ -102,7 +112,7 @@ export class SmithyMcpServerStack extends cdk.Stack {
             service: 'bedrock',
             region: props.resourceRegion,
             resource: 'knowledge-base',
-            resourceName: props.knowledgeBaseId
+            resourceName: knowledgeBaseId
           })
         ]
       })

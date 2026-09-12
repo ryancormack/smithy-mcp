@@ -139,7 +139,7 @@ new SmithyMcpServerStack(app, `SmithyMcpServer-${stage}`, {
   stackName: `${resourcePrefix}-server`,
   description: `${stage}: private-origin MCP server at ${config.domain}`,
   bucket: knowledgeBaseStack.bucket,
-  knowledgeBaseId: knowledgeBaseStack.knowledgeBaseId,
+  knowledgeBaseIdParamName: knowledgeBaseStack.knowledgeBaseIdParamName,
   resourceRegion: config.region,
   domainName: config.domain,
   hostedZone: dnsStack.hostedZone,
