@@ -107,8 +107,9 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     vectorIndexV2.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
     vectorIndexV2.addResourceDependency(vectorBucket);
 
-    // The knowledge base still uses v1 in this step (repointed in step 2).
-    const vectorIndex = legacyVectorIndex;
+    // Step 2: the knowledge base now uses v2. v1 is kept only so its RETAINed
+    // index is not orphaned by CloudFormation before manual cleanup.
+    const vectorIndex = vectorIndexV2;
 
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       roleName: `${props.resourcePrefix}-bedrock-kb`,
@@ -167,8 +168,13 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       })
     );
 
-    const knowledgeBase = new bedrock.CfnKnowledgeBase(this, 'SmithyKnowledgeBase', {
-      name: `${props.resourcePrefix}-kb`,
+    // Versioned logical id + name so CloudFormation creates a NEW knowledge
+    // base instead of replacing the old one in place. The old KB name
+    // smithy-mcp-<env>-kb is fixed, so an in-place replacement collides on the
+    // name (409 AlreadyExists); a distinct -kb-v2 name creates cleanly, and the
+    // old KB is left for manual cleanup. This KB points at the v2 index.
+    const knowledgeBase = new bedrock.CfnKnowledgeBase(this, 'SmithyKnowledgeBaseV2', {
+      name: `${props.resourcePrefix}-kb-v2`,
       description: `${props.stage} Smithy documentation knowledge base`,
       roleArn: knowledgeBaseRole.roleArn,
       knowledgeBaseConfiguration: {
