@@ -27,6 +27,16 @@ export default tseslint.config(
       globals: globals.node
     }
   },
+  {
+    // Website client-side scripts run in the browser, not Node.
+    files: ['packages/cdk/src/**/*.js'],
+    languageOptions: {
+      globals: globals.browser
+    },
+    rules: {
+      'no-unused-vars': ['error', { caughtErrorsIgnorePattern: '^_' }]
+    }
+  },
   ...tseslint.configs.strict.map(config => ({
     ...config,
     files: ['**/*.ts']

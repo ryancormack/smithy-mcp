@@ -1,109 +1,422 @@
+:root {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f2f4f7;
+  --border: #e3e7ec;
+  --text: #1b2430;
+  --muted: #5a6472;
+  --brand: #7048e8;
+  --brand-2: #b197fc;
+  --brand-ink: #4a2fb0;
+  --accent: #0aa5a5;
+  --code-bg: #f4f2fb;
+  --ok-bg: #e6f7ee;
+  --ok-ink: #0b7a48;
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 6px 20px rgba(16, 24, 40, 0.06);
+  --radius: 14px;
+}
+
 * {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.6;
-  color: #333;
-  background: #f5f5f5;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  line-height: 1.65;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
 }
 
-.container {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 40px 20px;
-}
-
+/* ---------- Header ---------- */
 header {
-  background: #232f3e;
-  color: white;
-  padding: 60px 20px;
+  position: relative;
+  color: #fff;
+  background:
+    radial-gradient(1200px 400px at 80% -10%, #8b6bf0 0%, transparent 60%),
+    linear-gradient(135deg, #4a2fb0 0%, #7048e8 55%, #9775fa 100%);
+  padding: 72px 20px 84px;
   text-align: center;
-  margin: -40px -20px 40px;
+  overflow: hidden;
+}
+
+header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 40px;
+  background: var(--bg);
+  clip-path: polygon(0 100%, 100% 100%, 100% 0);
+}
+
+.header-inner {
+  position: relative;
+  z-index: 1;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 18px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  font-family: Monaco, 'Courier New', monospace;
+  font-size: 1.3em;
+  font-weight: 700;
 }
 
 h1 {
-  font-size: 2.5em;
-  margin-bottom: 10px;
+  font-size: 2.6em;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
 }
 
 .subtitle {
-  font-size: 1.2em;
-  opacity: 0.9;
+  font-size: 1.15em;
+  opacity: 0.92;
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin: 22px 0 26px;
+}
+
+.badge {
+  font-size: 0.8em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* ---------- Layout ---------- */
+.container {
+  max-width: 900px;
+  margin: -44px auto 0;
+  padding: 0 20px 64px;
+  position: relative;
+  z-index: 2;
 }
 
 .card {
-  background: white;
-  border-radius: 8px;
-  padding: 30px;
-  margin-bottom: 30px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 32px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow);
 }
 
 h2 {
-  color: #232f3e;
-  margin-bottom: 20px;
-  font-size: 1.8em;
+  color: var(--text);
+  margin-bottom: 16px;
+  font-size: 1.6em;
+  letter-spacing: -0.01em;
 }
 
 h3 {
-  color: #232f3e;
-  margin: 25px 0 15px;
-  font-size: 1.3em;
+  color: var(--brand-ink);
+  margin: 26px 0 12px;
+  font-size: 1.15em;
 }
 
-code {
-  background: #f4f4f4;
-  padding: 2px 6px;
-  border-radius: 3px;
-  font-family: Monaco, 'Courier New', monospace;
+p {
+  margin: 0 0 12px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.92em;
+}
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.98em;
+  cursor: pointer;
+  border: 1px solid transparent;
+  text-decoration: none;
+  transition:
+    transform 0.06s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.btn:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: #fff;
+  color: var(--brand-ink);
+}
+
+.btn-primary:hover {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.btn-add {
+  background: linear-gradient(135deg, #7048e8, #9775fa);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(112, 72, 232, 0.35);
+}
+
+.btn-add:hover {
+  box-shadow: 0 8px 22px rgba(112, 72, 232, 0.45);
+}
+
+.add-glyph {
+  font-size: 1.15em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* ---------- Endpoint ---------- */
+.endpoint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  background: var(--surface-2);
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin: 16px 0 8px;
+  border-left: 4px solid var(--accent);
+}
+
+.method {
+  background: var(--accent);
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.85em;
+  letter-spacing: 0.03em;
+}
+
+.endpoint code {
+  font-size: 1em;
+  background: none;
+  padding: 0;
+  flex: 1;
+  min-width: 200px;
+}
+
+/* ---------- Tool grid / one-click ---------- */
+.tool-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.tool {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.tool-head h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 1.15em;
+}
+
+.tool > p {
+  color: var(--muted);
+  font-size: 0.92em;
+  flex: 0 0 auto;
+}
+
+.tool .btn-add {
+  align-self: flex-start;
+  margin: 6px 0 4px;
+}
+
+.pill {
+  font-size: 0.72em;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.pill-ok {
+  background: var(--ok-bg);
+  color: var(--ok-ink);
+  border-color: transparent;
+}
+
+.fallback {
+  margin-top: 12px;
+}
+
+.fallback > summary {
+  cursor: pointer;
+  color: var(--brand-ink);
   font-size: 0.9em;
+  font-weight: 600;
+  list-style: none;
+}
+
+.fallback > summary::-webkit-details-marker {
+  display: none;
+}
+
+.fallback > summary::before {
+  content: '▸ ';
+  display: inline-block;
+  transition: transform 0.15s ease;
+}
+
+.fallback[open] > summary::before {
+  content: '▾ ';
+}
+
+/* ---------- Code ---------- */
+code {
+  background: var(--code-bg);
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-family: Monaco, 'Courier New', monospace;
+  font-size: 0.88em;
+  color: var(--brand-ink);
+}
+
+.code-block {
+  position: relative;
+  margin: 12px 0;
 }
 
 pre {
-  background: #f4f4f4;
-  padding: 20px;
-  border-radius: 5px;
+  background: #1e1b2e;
+  color: #eae6ff;
+  padding: 18px 20px;
+  border-radius: 10px;
   overflow-x: auto;
-  margin: 15px 0;
+  font-size: 0.86em;
+}
+
+/* room for the absolutely-positioned copy button so it never covers code */
+.code-block pre {
+  padding-top: 40px;
 }
 
 pre code {
   background: none;
   padding: 0;
+  color: inherit;
+  font-size: 1em;
 }
 
-.endpoint {
-  background: #e8f4f8;
-  padding: 15px;
-  border-radius: 5px;
-  margin: 15px 0;
-  border-left: 4px solid #0073bb;
-}
-
-.method {
-  display: inline-block;
-  background: #0073bb;
-  color: white;
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font: inherit;
+  font-size: 0.75em;
+  font-weight: 600;
+  color: #eae6ff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 7px;
   padding: 4px 10px;
-  border-radius: 3px;
-  font-weight: bold;
-  margin-right: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
 
+.copy-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.copy-btn.copied {
+  background: var(--ok-ink);
+  border-color: transparent;
+  color: #fff;
+}
+
+/* endpoint copy button sits on a light surface */
+.endpoint .copy-btn {
+  position: static;
+  color: var(--brand-ink);
+  background: #fff;
+  border-color: var(--border);
+}
+
+.endpoint .copy-btn:hover {
+  background: var(--surface-2);
+}
+
+/* ---------- Lists, links, note ---------- */
 ul {
-  margin: 15px 0 15px 30px;
+  margin: 12px 0 12px 22px;
 }
 
 li {
-  margin: 8px 0;
+  margin: 6px 0;
 }
 
 a {
-  color: #0073bb;
+  color: var(--brand);
   text-decoration: none;
 }
 
@@ -112,9 +425,86 @@ a:hover {
 }
 
 .note {
-  background: #fff3cd;
-  border-left: 4px solid #ffc107;
-  padding: 15px;
-  margin: 15px 0;
-  border-radius: 5px;
+  background: linear-gradient(0deg, var(--surface-2), var(--surface-2));
+  border-left: 4px solid var(--brand);
+  padding: 14px 16px;
+  margin: 16px 0 0;
+  border-radius: 8px;
+  font-size: 0.95em;
+}
+
+/* ---------- Footer + toast ---------- */
+footer {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9em;
+  padding: 8px 20px 48px;
+}
+
+footer a {
+  color: var(--muted);
+  text-decoration: underline;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%) translateY(10px);
+  background: var(--text);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 999px;
+  font-size: 0.9em;
+  font-weight: 600;
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 680px) {
+  .tool-grid {
+    grid-template-columns: 1fr;
+  }
+
+  h1 {
+    font-size: 2.1em;
+  }
+
+  .card {
+    padding: 22px;
+  }
+}
+
+/* ---------- Dark mode ---------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14131c;
+    --surface: #1c1b26;
+    --surface-2: #24222f;
+    --border: #302e3d;
+    --text: #ece9f5;
+    --muted: #a29fb2;
+    --brand: #b197fc;
+    --brand-ink: #cbb8ff;
+    --code-bg: #262234;
+    --ok-bg: #123524;
+    --ok-ink: #52c78a;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.35);
+  }
+
+  .btn-primary {
+    background: #cbb8ff;
+    color: #241a4d;
+  }
 }

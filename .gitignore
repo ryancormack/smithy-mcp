@@ -6,6 +6,8 @@ cdk.out/
 *.js
 *.d.ts
 !jest.config.js
+# Website client-side script is hand-written source, not build output.
+!packages/cdk/src/app.js
 .env
 .env.local
 coverage/
