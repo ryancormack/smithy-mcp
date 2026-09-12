@@ -243,6 +243,23 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       stringValue: this.knowledgeBaseId
     });
 
+    // Keep producing the OLD cross-stack export for one deploy while the server
+    // migrates to the SSM parameter above. The deployed server stack still
+    // imports this export name; `cdk deploy --all` no longer sees a dependency
+    // edge (the server reads SSM now), so it may update the KB stack first and
+    // try to DELETE this export while the server still imports it, which
+    // CloudFormation refuses ("Cannot delete export ... in use"). Recreating it
+    // at its UNCHANGED value keeps the import valid so both stacks update in one
+    // deploy. Value unchanged, so no "cannot update export" either. Removed in a
+    // later cleanup deploy once no stack imports it.
+    const retainedKbIdExport = new cdk.CfnOutput(this, 'RetainedKnowledgeBaseIdExport', {
+      value: this.knowledgeBaseId,
+      exportName: `${props.resourcePrefix}-knowledge-base:ExportsOutputFnGetAttSmithyKnowledgeBaseKnowledgeBaseIdA3ABAB31`
+    });
+    retainedKbIdExport.overrideLogicalId(
+      'ExportsOutputFnGetAttSmithyKnowledgeBaseKnowledgeBaseIdA3ABAB31'
+    );
+
     const ingestionLogGroup = new logs.LogGroup(this, 'IngestionLogGroup', {
       logGroupName: `/aws/lambda/${props.resourcePrefix}-ingestion`,
       retention: logs.RetentionDays.ONE_YEAR,
