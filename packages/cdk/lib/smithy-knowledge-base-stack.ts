@@ -227,6 +227,22 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     this.knowledgeBaseId = knowledgeBase.attrKnowledgeBaseId;
     this.dataSourceId = dataSource.attrDataSourceId;
 
+    // Retain the OLD auto-generated cross-stack export name across the KB
+    // logical-id rename (SmithyKnowledgeBase -> SmithyKnowledgeBaseV2). The
+    // server stack imports this exact export name; if it disappears when the KB
+    // is renamed, CloudFormation refuses ("Cannot delete export ... in use").
+    // Recreating the same export name + Output logical id, now sourced from the
+    // new KB, keeps the server import valid so both stacks update in one deploy.
+    // This retainer is removed in the follow-up deploy once the server stack no
+    // longer imports it (step 2b).
+    const retainedKbIdExport = new cdk.CfnOutput(this, 'RetainedKnowledgeBaseIdExport', {
+      value: this.knowledgeBaseId,
+      exportName: `${props.resourcePrefix}-knowledge-base:ExportsOutputFnGetAttSmithyKnowledgeBaseKnowledgeBaseIdA3ABAB31`
+    });
+    retainedKbIdExport.overrideLogicalId(
+      'ExportsOutputFnGetAttSmithyKnowledgeBaseKnowledgeBaseIdA3ABAB31'
+    );
+
     const ingestionLogGroup = new logs.LogGroup(this, 'IngestionLogGroup', {
       logGroupName: `/aws/lambda/${props.resourcePrefix}-ingestion`,
       retention: logs.RetentionDays.ONE_YEAR,
