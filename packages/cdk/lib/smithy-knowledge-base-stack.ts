@@ -79,23 +79,10 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
     });
     vectorBucket.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
 
-    // Existing (v1) index the knowledge base currently points at. Kept so this
-    // deploy does not replace the KB; step 2 repoints the KB to v2 and drops v1.
-    const legacyVectorIndex = new s3vectors.CfnIndex(this, 'SmithyVectorIndex', {
-      vectorBucketArn: vectorBucket.attrVectorBucketArn,
-      indexName: `${props.resourcePrefix}-index`,
-      dataType: 'float32',
-      dimension: EMBEDDING_DIMENSIONS,
-      distanceMetric: 'cosine',
-      tags: [{ key: 'Environment', value: props.stage }]
-    });
-    legacyVectorIndex.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
-    legacyVectorIndex.addResourceDependency(vectorBucket);
-
-    // New (v2) index with non-filterable Bedrock metadata keys, so the chunk
-    // text and source JSON do not count against the 2048-byte filterable cap.
-    // Provisioned now but not yet used; step 2 repoints the KB to it.
-    const vectorIndexV2 = new s3vectors.CfnIndex(this, 'SmithyVectorIndexV2', {
+    // The index with non-filterable Bedrock metadata keys, so the chunk text
+    // and source JSON do not count against the 2048-byte filterable cap. This
+    // is what the knowledge base points at.
+    const vectorIndex = new s3vectors.CfnIndex(this, 'SmithyVectorIndexV2', {
       vectorBucketArn: vectorBucket.attrVectorBucketArn,
       indexName: `${props.resourcePrefix}-index-v2`,
       dataType: 'float32',
@@ -106,13 +93,8 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
       },
       tags: [{ key: 'Environment', value: props.stage }]
     });
-    vectorIndexV2.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
-    vectorIndexV2.addResourceDependency(vectorBucket);
-
-    // Deploy 2: the KB now uses the v2 index (non-filterable Bedrock metadata,
-    // which fixes the 2048-byte filterable-metadata ingestion failure). v1 is
-    // kept only so its RETAINed index is not orphaned before manual cleanup.
-    const vectorIndex = vectorIndexV2;
+    vectorIndex.applyRemovalPolicy(cdk.RemovalPolicy.RETAIN);
+    vectorIndex.addResourceDependency(vectorBucket);
 
     const knowledgeBaseRole = new iam.Role(this, 'KnowledgeBaseRole', {
       roleName: `${props.resourcePrefix}-bedrock-kb`,
@@ -167,7 +149,7 @@ export class SmithyKnowledgeBaseStack extends cdk.Stack {
           's3vectors:GetVectors',
           's3vectors:DeleteVectors'
         ],
-        resources: [legacyVectorIndex.attrIndexArn, vectorIndexV2.attrIndexArn]
+        resources: [vectorIndex.attrIndexArn]
       })
     );
 

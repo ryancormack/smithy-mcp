@@ -53,16 +53,10 @@ function mcpTemplate(stage = 'staging'): Template {
 test('creates an isolated S3 Vectors Bedrock knowledge base and data source', () => {
   const template = knowledgeBaseTemplate();
   template.resourceCountIs('AWS::S3Vectors::VectorBucket', 1);
-  // Deploy 2: both indexes exist; the KB now points at the v2 index. The KB id
-  // is still published via SSM for the server stack; the retained cross-stack
-  // export is dropped now that no stack imports it.
-  template.resourceCountIs('AWS::S3Vectors::Index', 2);
-  template.hasResourceProperties('AWS::S3Vectors::Index', {
-    DataType: 'float32',
-    Dimension: 1024,
-    DistanceMetric: 'cosine',
-    IndexName: 'smithy-mcp-staging-index'
-  });
+  // The KB points at the v2 index (non-filterable Bedrock metadata keys). The
+  // legacy v1 index was retired once every account was migrated to v2. The KB
+  // id is published via SSM for the server stack.
+  template.resourceCountIs('AWS::S3Vectors::Index', 1);
   template.hasResourceProperties('AWS::S3Vectors::Index', {
     DataType: 'float32',
     Dimension: 1024,
