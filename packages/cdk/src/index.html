@@ -4,40 +4,243 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Smithy MCP Server</title>
+    <meta
+      name="description"
+      content="A serverless Model Context Protocol (MCP) server for the Smithy 2.0 documentation. Semantic search, full-document reads, and one-click setup for Kiro, Claude Code, and Codex."
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
 
   <body>
     <header>
-      <h1>Smithy MCP Server</h1>
-      <p class="subtitle">Model Context Protocol server for Smithy documentation</p>
+      <div class="header-inner">
+        <div class="logo-mark" aria-hidden="true">&lt;/&gt;</div>
+        <h1>Smithy MCP Server</h1>
+        <p class="subtitle">
+          Semantic search and document access for the Smithy&nbsp;2.0 docs, over the Model Context
+          Protocol.
+        </p>
+        <div class="badges" aria-hidden="true">
+          <span class="badge">Serverless</span>
+          <span class="badge">Bedrock Knowledge Base</span>
+          <span class="badge">Streamable HTTP</span>
+        </div>
+        <div class="header-actions">
+          <a class="btn btn-primary" href="#install">Add to your assistant</a>
+          <a
+            class="btn btn-ghost"
+            href="https://github.com/ryancormack/smithy-mcp"
+            target="_blank"
+            rel="noopener"
+            >View on GitHub</a
+          >
+        </div>
+      </div>
     </header>
 
-    <div class="container">
-      <div class="card">
+    <main class="container">
+      <section class="card" id="overview">
         <h2>Overview</h2>
         <p>
-          This MCP server provides semantic search and document access for Smithy documentation
-          using AWS Bedrock Knowledge Bases. It enables AI assistants to answer questions about
-          Smithy with accurate, context-aware responses.
+          This MCP server gives an AI assistant accurate, source-backed answers about
+          <a href="https://smithy.io" target="_blank" rel="noopener">Smithy</a>. It retrieves
+          semantic matches from the official Smithy documentation through an Amazon Bedrock
+          Knowledge Base, and exposes the published Markdown directly for browsing and full-document
+          reads. Point any MCP client at one HTTPS endpoint and start asking.
         </p>
-      </div>
-
-      <div class="card">
-        <h2>MCP Endpoint</h2>
         <div class="endpoint">
           <span class="method">POST</span>
-          <code>/mcp</code>
+          <code>https://smithymcp.com/mcp</code>
+          <button class="copy-btn" type="button" data-copy="https://smithymcp.com/mcp">Copy</button>
         </div>
-        <p>All MCP requests should be sent to this endpoint using JSON-RPC 2.0 format.</p>
-      </div>
+        <p class="muted">Stateless MCP Streamable HTTP. Send JSON-RPC 2.0 requests to this URL.</p>
+      </section>
 
-      <div class="card">
+      <section class="card" id="install">
+        <h2>Add to your assistant</h2>
+        <p>
+          Pick your tool. Kiro supports a real one-click install; Claude Code and Codex install with
+          a single terminal command. The raw JSON / TOML config is shown alongside each as a
+          fallback.
+        </p>
+
+        <div class="tool-grid">
+          <!-- Kiro: genuine one-click deep link -->
+          <article class="tool">
+            <div class="tool-head">
+              <h3>Kiro</h3>
+              <span class="pill pill-ok">One-click</span>
+            </div>
+            <p>Adds the server to your Kiro user MCP config. Kiro asks you to approve it first.</p>
+            <a
+              class="btn btn-add"
+              href="https://kiro.dev/launch/mcp/add?name=smithy&config=%7B%22url%22%3A%22https%3A%2F%2Fsmithymcp.com%2Fmcp%22%2C%22disabled%22%3Afalse%2C%22autoApprove%22%3A%5B%5D%7D"
+            >
+              <span class="add-glyph" aria-hidden="true">+</span> Add to Kiro
+            </a>
+            <details class="fallback">
+              <summary>Or add it manually (<code>.kiro/settings/mcp.json</code>)</summary>
+              <div class="code-block">
+                <button
+                  class="copy-btn"
+                  type="button"
+                  data-copy-target="cfg-kiro"
+                  aria-label="Copy Kiro configuration"
+                >
+                  Copy
+                </button>
+                <pre><code id="cfg-kiro">{
+  "mcpServers": {
+    "smithy": {
+      "url": "https://smithymcp.com/mcp",
+      "disabled": false,
+      "autoApprove": []
+    }
+  }
+}</code></pre>
+              </div>
+            </details>
+          </article>
+
+          <!-- Claude Code: CLI command, no deep link -->
+          <article class="tool">
+            <div class="tool-head">
+              <h3>Claude Code</h3>
+              <span class="pill">CLI command</span>
+            </div>
+            <p>
+              Claude Code has no install URL scheme, so run this one command in your terminal. It
+              registers the remote server over HTTP.
+            </p>
+            <div class="code-block">
+              <button
+                class="copy-btn"
+                type="button"
+                data-copy-target="cmd-claude"
+                aria-label="Copy Claude Code command"
+              >
+                Copy
+              </button>
+              <pre><code id="cmd-claude">claude mcp add --transport http smithy https://smithymcp.com/mcp</code></pre>
+            </div>
+            <details class="fallback">
+              <summary>Check it connected</summary>
+              <div class="code-block">
+                <button
+                  class="copy-btn"
+                  type="button"
+                  data-copy-target="cmd-claude-list"
+                  aria-label="Copy Claude Code list command"
+                >
+                  Copy
+                </button>
+                <pre><code id="cmd-claude-list">claude mcp list</code></pre>
+              </div>
+              <p class="muted">
+                Look for <code>smithy</code> reporting <code>✔ Connected</code>. Run these in your
+                shell, not inside a <code>claude</code> session.
+              </p>
+            </details>
+          </article>
+
+          <!-- Codex: CLI command / TOML, no deep link -->
+          <article class="tool">
+            <div class="tool-head">
+              <h3>Codex</h3>
+              <span class="pill">CLI command</span>
+            </div>
+            <p>
+              Codex has no install URL scheme. It speaks Streamable HTTP natively (Codex CLI 0.134.0
+              or newer), so one command adds it.
+            </p>
+            <div class="code-block">
+              <button
+                class="copy-btn"
+                type="button"
+                data-copy-target="cmd-codex"
+                aria-label="Copy Codex command"
+              >
+                Copy
+              </button>
+              <pre><code id="cmd-codex">codex mcp add smithy --url https://smithymcp.com/mcp</code></pre>
+            </div>
+            <details class="fallback">
+              <summary>Or edit <code>~/.codex/config.toml</code></summary>
+              <div class="code-block">
+                <button
+                  class="copy-btn"
+                  type="button"
+                  data-copy-target="cfg-codex"
+                  aria-label="Copy Codex TOML configuration"
+                >
+                  Copy
+                </button>
+                <pre><code id="cfg-codex">[mcp_servers.smithy]
+url = "https://smithymcp.com/mcp"</code></pre>
+              </div>
+              <p class="muted">The same config is shared by the Codex CLI and IDE extension.</p>
+            </details>
+          </article>
+
+          <!-- Claude Desktop: config file -->
+          <article class="tool">
+            <div class="tool-head">
+              <h3>Claude Desktop</h3>
+              <span class="pill">Config file</span>
+            </div>
+            <p>Add the server to your Claude Desktop config, then restart the app.</p>
+            <div class="code-block">
+              <button
+                class="copy-btn"
+                type="button"
+                data-copy-target="cfg-claude-desktop"
+                aria-label="Copy Claude Desktop configuration"
+              >
+                Copy
+              </button>
+              <pre><code id="cfg-claude-desktop">{
+  "mcpServers": {
+    "smithy-docs": {
+      "url": "https://smithymcp.com/mcp",
+      "transport": "http"
+    }
+  }
+}</code></pre>
+            </div>
+            <details class="fallback">
+              <summary>Config file location</summary>
+              <ul>
+                <li>
+                  <strong>macOS:</strong>
+                  <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+                </li>
+                <li>
+                  <strong>Windows:</strong> <code>%APPDATA%\Claude\claude_desktop_config.json</code>
+                </li>
+              </ul>
+            </details>
+          </article>
+        </div>
+      </section>
+
+      <section class="card" id="tools">
         <h2>Available Tools</h2>
 
         <h3>search_smithy_docs</h3>
-        <p>Search Smithy documentation using semantic search powered by Bedrock Knowledge Base.</p>
-        <pre><code>{
+        <p>
+          Search the Smithy documentation with semantic search powered by the Bedrock Knowledge
+          Base.
+        </p>
+        <div class="code-block">
+          <button
+            class="copy-btn"
+            type="button"
+            data-copy-target="tool-search"
+            aria-label="Copy search example"
+          >
+            Copy
+          </button>
+          <pre><code id="tool-search">{
   "jsonrpc": "2.0",
   "method": "tools/call",
   "params": {
@@ -49,18 +252,25 @@
   },
   "id": 1
 }</code></pre>
+        </div>
         <p><strong>Parameters:</strong></p>
         <ul>
-          <li><code>query</code> (string, required): Search query</li>
-          <li>
-            <code>max_results</code> (number, optional): Maximum results to return (1-10, default:
-            5)
-          </li>
+          <li><code>query</code> (string, required): Search query, 1&ndash;2,000 characters.</li>
+          <li><code>max_results</code> (number, optional): 1&ndash;10, default 5.</li>
         </ul>
 
         <h3>read_smithy_doc</h3>
-        <p>Read the full content of a specific Smithy documentation file.</p>
-        <pre><code>{
+        <p>Read the full content of one Smithy documentation file.</p>
+        <div class="code-block">
+          <button
+            class="copy-btn"
+            type="button"
+            data-copy-target="tool-read"
+            aria-label="Copy read example"
+          >
+            Copy
+          </button>
+          <pre><code id="tool-read">{
   "jsonrpc": "2.0",
   "method": "tools/call",
   "params": {
@@ -71,16 +281,27 @@
   },
   "id": 2
 }</code></pre>
+        </div>
         <p><strong>Parameters:</strong></p>
         <ul>
           <li>
-            <code>file_path</code> (string, required): Relative path to the documentation file
+            <code>file_path</code> (string, required): Relative path below
+            <code>smithy-docs/</code>; traversal is rejected.
           </li>
         </ul>
 
         <h3>list_smithy_topics</h3>
-        <p>List all available Smithy documentation files.</p>
-        <pre><code>{
+        <p>List every available Smithy documentation file.</p>
+        <div class="code-block">
+          <button
+            class="copy-btn"
+            type="button"
+            data-copy-target="tool-list"
+            aria-label="Copy list example"
+          >
+            Copy
+          </button>
+          <pre><code id="tool-list">{
   "jsonrpc": "2.0",
   "method": "tools/call",
   "params": {
@@ -89,88 +310,184 @@
   },
   "id": 3
 }</code></pre>
-      </div>
+        </div>
+      </section>
 
-      <div class="card">
-        <h2>Kiro IDE Integration</h2>
+      <section class="card" id="lsp">
+        <h2>Pair it with the Smithy Language Server</h2>
         <p>
-          Add this server to your Kiro MCP configuration at <code>.kiro/settings/mcp.json</code>:
+          This server answers questions <em>about</em> Smithy. For live feedback
+          <em>while you write</em> a <code>.smithy</code> model &mdash; diagnostics, hover,
+          completion, go-to-definition &mdash; run the official
+          <a
+            href="https://github.com/smithy-lang/smithy-language-server"
+            target="_blank"
+            rel="noopener"
+            >Smithy Language Server</a
+          >
+          (LSP) in your editor. The two work well together: the LSP keeps your model valid as you
+          type, and this MCP server explains the concepts behind the rules.
         </p>
-        <pre><code>{
-  "mcpServers": {
-    "smithy": {
-      "url": "https://smithymcp.com/mcp"
-    }
-  }
-}</code></pre>
-        <div class="note">
-          <strong>Note:</strong> Reconnect the MCP server from the Kiro MCP Server view after
-          updating the configuration.
-        </div>
-      </div>
 
-      <div class="card">
-        <h2>Claude Desktop Integration</h2>
-        <p>Add this server to your Claude Desktop configuration:</p>
-        <pre><code>{
-  "mcpServers": {
-    "smithy-docs": {
-      "url": "https://your-domain.com/mcp",
-      "transport": "http"
-    }
-  }
+        <h3>1. Get the language server</h3>
+        <p>
+          Install the <strong>Smithy</strong> extension for VS Code (it bundles and launches the
+          language server for you), or run the server directly for another editor:
+        </p>
+        <div class="code-block">
+          <button
+            class="copy-btn"
+            type="button"
+            data-copy-target="lsp-run"
+            aria-label="Copy language server command"
+          >
+            Copy
+          </button>
+          <pre><code id="lsp-run"># Run the Smithy Language Server (Java 17+ on PATH)
+# Coursier is the simplest launcher:
+cs launch software.amazon.smithy:smithy-language-server:latest.release</code></pre>
+        </div>
+        <p class="muted">
+          The VS Code Marketplace extension is the easiest path and needs no manual launch; the
+          command above is for editors that speak LSP directly (Neovim, Emacs, Zed, &hellip;).
+        </p>
+
+        <h3>2. Point your editor at it</h3>
+        <p>
+          Most editors auto-detect a Smithy project from a <code>smithy-build.json</code> at the
+          workspace root. A minimal one:
+        </p>
+        <div class="code-block">
+          <button
+            class="copy-btn"
+            type="button"
+            data-copy-target="lsp-build"
+            aria-label="Copy smithy-build.json"
+          >
+            Copy
+          </button>
+          <pre><code id="lsp-build">{
+  "version": "1.0",
+  "sources": ["model"]
 }</code></pre>
-        <p>Configuration file location:</p>
+        </div>
+        <p>Then a model file the language server will check as you edit it:</p>
+        <div class="code-block">
+          <button
+            class="copy-btn"
+            type="button"
+            data-copy-target="lsp-model"
+            aria-label="Copy example Smithy model"
+          >
+            Copy
+          </button>
+          <pre><code id="lsp-model">// model/weather.smithy
+$version: "2"
+
+namespace example.weather
+
+/// Provides weather forecasts.
+service Weather {
+    version: "2006-03-01"
+    operations: [GetForecast]
+}
+
+operation GetForecast {
+    input := {
+        @required
+        city: String
+    }
+    output := {
+        summary: String
+        highC: Integer
+    }
+}</code></pre>
+        </div>
+        <p>
+          Save it and the language server reports unknown shapes, missing traits, and syntax errors
+          inline. When it flags something you do not understand, ask your assistant &mdash; it calls
+          this MCP server to explain the rule.
+        </p>
+
+        <div class="note">
+          <strong>Together:</strong> the LSP tells you <em>that</em> line 12 is wrong; the Smithy
+          MCP server tells you <em>why</em>, with the doc passage that explains the trait.
+        </div>
+      </section>
+
+      <section class="card" id="usage">
+        <h2>Example prompts</h2>
+        <p>Once configured, ask your assistant things like:</p>
         <ul>
+          <li>&ldquo;Search the Smithy docs for how to define a service.&rdquo;</li>
           <li>
-            <strong>macOS:</strong>
-            <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+            &ldquo;How do resource shapes and their lifecycle operations work in Smithy?&rdquo;
           </li>
           <li>
-            <strong>Windows:</strong> <code>%APPDATA%\Claude\claude_desktop_config.json</code>
+            &ldquo;My model has <code>@pattern</code> on an integer &mdash; why is the LSP
+            complaining?&rdquo;
           </li>
+          <li>&ldquo;Show me an example of applying a custom trait.&rdquo;</li>
         </ul>
-        <div class="note">
-          <strong>Note:</strong> Restart Claude Desktop after updating the configuration.
-        </div>
-      </div>
+      </section>
 
-      <div class="card">
-        <h2>Example Usage</h2>
-        <p>Once configured, you can ask Claude questions like:</p>
-        <ul>
-          <li>"Search the Smithy docs for service definitions"</li>
-          <li>"How do I use Smithy traits?"</li>
-          <li>"Show me Smithy model examples"</li>
-          <li>"What are the best practices for Smithy API design?"</li>
-        </ul>
-      </div>
-
-      <div class="card">
+      <section class="card" id="architecture">
         <h2>Architecture</h2>
-        <p>This server uses:</p>
         <ul>
-          <li><strong>AWS Lambda:</strong> Serverless compute for MCP server</li>
-          <li><strong>Bedrock Knowledge Base:</strong> Semantic search with S3 vector storage</li>
-          <li><strong>CloudFront:</strong> Global CDN for low-latency access</li>
-          <li><strong>S3:</strong> Documentation storage and vector embeddings</li>
+          <li><strong>AWS Lambda</strong> &mdash; serverless compute for the MCP server.</li>
+          <li>
+            <strong>Bedrock Knowledge Base</strong> &mdash; semantic search over S3 Vectors storage.
+          </li>
+          <li>
+            <strong>CloudFront + WAF</strong> &mdash; global CDN, TLS, and per-IP rate limiting.
+          </li>
+          <li><strong>S3</strong> &mdash; documentation storage and vector embeddings.</li>
         </ul>
-      </div>
+        <p class="muted">
+          Documentation is refreshed from <code>smithy-lang/smithy</code> weekly, then re-indexed.
+        </p>
+      </section>
 
-      <div class="card">
+      <section class="card" id="resources">
         <h2>Resources</h2>
         <ul>
-          <li><a href="https://smithy.io" target="_blank">Smithy Documentation</a></li>
           <li>
-            <a href="https://modelcontextprotocol.io" target="_blank">Model Context Protocol</a>
+            <a href="https://smithy.io" target="_blank" rel="noopener">Smithy documentation</a>
           </li>
           <li>
-            <a href="https://github.com/ryancormack/smithy-mcp" target="_blank"
-              >GitHub Repository</a
+            <a
+              href="https://github.com/smithy-lang/smithy-language-server"
+              target="_blank"
+              rel="noopener"
+              >Smithy Language Server</a
+            >
+          </li>
+          <li>
+            <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener"
+              >Model Context Protocol</a
+            >
+          </li>
+          <li>
+            <a href="https://github.com/ryancormack/smithy-mcp" target="_blank" rel="noopener"
+              >GitHub repository</a
             >
           </li>
         </ul>
-      </div>
-    </div>
+      </section>
+    </main>
+
+    <footer>
+      <p>
+        Smithy MCP Server &middot;
+        <a href="https://smithymcp.com/mcp">/mcp</a> &middot;
+        <a href="https://github.com/ryancormack/smithy-mcp" target="_blank" rel="noopener"
+          >source</a
+        >
+      </p>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden>Copied</div>
+
+    <script src="/app.js"></script>
   </body>
 </html>

@@ -299,9 +299,27 @@ test('exposes only exact mcp path through CloudFront and an IAM-authenticated fu
   });
   const indexHtml = readFileSync(path.resolve(__dirname, '../src/index.html'), 'utf8');
   const styles = readFileSync(path.resolve(__dirname, '../src/styles.css'), 'utf8');
+  const appJs = readFileSync(path.resolve(__dirname, '../src/app.js'), 'utf8');
   assert.match(indexHtml, /<link rel="stylesheet" href="\/styles\.css" \/>/);
-  assert.doesNotMatch(indexHtml, /<style(?:\s|>)/i);
   assert.match(styles, /\.container\s*\{/);
+  // CSP is `default-src 'self'` with no unsafe-inline: styling and scripting
+  // must be external same-origin files, never inline.
+  assert.doesNotMatch(indexHtml, /<style(?:\s|>)/i);
+  assert.doesNotMatch(indexHtml, /\son[a-z]+="/i); // no inline event handlers (onclick, ...)
+  assert.match(indexHtml, /<script src="\/app\.js"><\/script>/);
+  assert.ok(appJs.includes('clipboard'), 'app.js implements copy-to-clipboard');
+  // Kiro one-click install deep link (documented launch URL + url-encoded config).
+  assert.match(
+    indexHtml,
+    /https:\/\/kiro\.dev\/launch\/mcp\/add\?name=smithy&config=/,
+    'Kiro one-click Add button present'
+  );
+  // Claude Code and Codex have no deep link: their documented install commands are shown.
+  assert.match(indexHtml, /claude mcp add --transport http smithy https:\/\/smithymcp\.com\/mcp/);
+  assert.match(indexHtml, /codex mcp add smithy --url https:\/\/smithymcp\.com\/mcp/);
+  // Smithy Language Server example section.
+  assert.match(indexHtml, /smithy-language-server/);
+  assert.match(indexHtml, /smithy-build\.json/);
 
   template.hasResourceProperties('AWS::CloudWatch::Alarm', {
     AlarmName: 'smithy-mcp-staging-cloudfront-5xx-error-rate',
