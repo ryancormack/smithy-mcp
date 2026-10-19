@@ -1,4 +1,4 @@
-FROM public.ecr.aws/docker/library/node:24-bookworm-slim AS build
+FROM public.ecr.aws/docker/library/node:26-bookworm-slim AS build
 
 WORKDIR /workspace
 RUN corepack enable
@@ -21,7 +21,7 @@ RUN pnpm --filter @smithy-mcp/cdk exec esbuild \
       --outfile=/asset/index.mjs
 
 FROM public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0 AS adapter
-FROM public.ecr.aws/docker/library/node:24-bookworm-slim AS runtime
+FROM public.ecr.aws/docker/library/node:26-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
     PORT=8080 \
